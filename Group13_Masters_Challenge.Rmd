@@ -28,7 +28,7 @@ library(ggalluvial)
 con <- oefenwebDatabase::connect()
 ```
 
-Grab the data from original database
+Grab the data from original database some changes
 
 ```{r}
 # Create necessary objects
