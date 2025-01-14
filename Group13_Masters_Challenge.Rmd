@@ -28,7 +28,7 @@ library(ggalluvial)
 con <- oefenwebDatabase::connect()
 ```
 
-Grab the data from original database some changes
+Grab the data from original database
 
 ```{r}
 # Create necessary objects
@@ -47,7 +47,7 @@ for (i in 1:10) {
 }
 
 # Turn the list into a single df
-ed_logs <- bind_rows(e_d_logs)
+ed_logs <- bind_rows(ed_logs)
 
 # Getting deadlines for items in 59
 query <- paste0("SELECT id AS item_id,
@@ -62,6 +62,8 @@ ed_logs <- ed_logs %>%
   rename(date = created) 
 ed_logs$date <-
   as.POSIXct(ed_logs$date, format = "%Y-%m-%d %H:%M:%S")
+
+  
 ```
 
 
@@ -84,7 +86,7 @@ items_20 <- deadlines_59 %>%
   pull(item_id)
 
 # Categorical columns
-cats <- colnames(ed_logs[,c(8:11, 14:16)])
+cats <- colnames(ed_logs[,c(8:11, 14:15)])
 
 # Adjustments to data
 ed_logs = ed_logs %>%
@@ -100,40 +102,7 @@ ed_logs = ed_logs %>%
     response_in_seconds = response_in_seconds / 1000,
     across(all_of(cats), as.factor)
   ) 
-  
-
-```
-
-
-```{r}
-# Finding users that alternate between showing coins and not
-swappers <- ed_logs %>%
-  distinct(user_id, session) %>%       # Get unique choices
-  count(user_id) %>%                    
-  filter(n == 2) %>%                    
-  pull(user_id)
-# 22272 users have swapped at least once
-
-# Finding users that have never swapped between showing coins or not
-not_swappers <- ed_logs %>%
-  filter(!(user_id %in% swappers)) %>%  
-  pull(user_id)
-# 59044 users have never swapped
-
-# Users that don't show coins
-no_shows <- ed_logs %>%
-  filter(user_id %in% not_swappers & show_coins == 0) %>%
-  pull(user_id)
-# 4069 users never showed coins
-
-
-```
-
-
-```{r}
-# Investigating swapping behavior, especially for those swapping to show coins after change
-
-# Put data into weeks form for greater clarity
+# Adding time_weeks column and organizing by user_id then date
 ed_logs <- ed_logs %>%
   group_by(user_id) %>%
   arrange(user_id, date) %>%
@@ -141,7 +110,52 @@ ed_logs <- ed_logs %>%
     difftime(date, start_date, units = "weeks")
   ))) %>%
   mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks)) %>%  # Ensure any negative or 0 values are set to 1
-  ungroup()  
+  ungroup() 
+
+```
+
+
+```{r}
+# Total number of unique users
+num_users <- n_distinct(ed_logs$user_id)
+# 23305
+
+# Finding users that alternate between showing coins and not
+swappers <- ed_logs %>%
+  select(user_id, show_coins) %>%
+  distinct(user_id, show_coins) %>%       # Get unique choices
+  count(user_id) %>%                    
+  filter(n == 2) %>%                    
+  pull(user_id)
+# 11118 users have swapped at least once
+# Proportion
+length(swappers) / num_users # .477065
+
+# Finding users that have never swapped between showing coins or not
+not_swappers <- ed_logs %>%
+  select(user_id, show_coins) %>%
+  distinct(user_id, show_coins) %>%       # Get unique choices
+  count(user_id) %>%                    
+  filter(n == 1) %>%                    
+  pull(user_id)
+# 12187 users have never swapped
+# Proportion
+length(not_swappers) / num_users # .522935
+
+# Users that don't show coins
+no_shows <- ed_logs %>%
+  distinct(user_id, show_coins) %>%
+  filter(user_id %in% not_swappers & show_coins == 0) %>%
+  pull(user_id)
+# 132 users never showed coins
+# Proportion
+length(no_shows) / num_users # .005664021
+
+```
+
+
+```{r}
+# Investigating swapping behavior, especially for those swapping to show coins after change
 
 # Getting data needed for sankey plot
 sankey_data <- ed_logs %>%
@@ -149,11 +163,6 @@ sankey_data <- ed_logs %>%
   filter(user_id %in% swappers) %>%
   mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
 
-#sankey_data <- sankey_data %>%
-#  mutate(difficulty = factor(
-#    difficulty,
-#    levels = c(0, 1, 2),
-#    labels = c("Easy", "Medium", "Hard")))
 
 # Group by individual and interval, then summarize
 sankey_tibble <- sankey_data %>%
@@ -171,11 +180,78 @@ ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = m
   theme(legend.position = "top") +
   labs(x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals", legend = "Mode show_coins")
 ```
-Week 
+Between section 30 and 31 is when the change is made. Which happens to also be paired by a major exodus of students from not showing to then showing, meaning that at least to some extent communication of the feature has occurred outside of personal experience.
+
+```{r}
+# Looking deeper. Investigating if students who've never shown coins between sep 1st 2024 and oct 25th 2024 are part of that exodus
+stuff <- ed_logs %>%
+  select(user_id, show_coins, time_weeks, date) %>%
+  filter(user_id %in% swappers, 
+         time_weeks %in% 52:64) %>%
+  arrange(user_id, time_weeks)
+
+# Users who never showed coins in section 30 where change occurs
+unknowners <- stuff %>%
+  filter(time_weeks %in% 52:60) %>%    # Keep only rows within the specified weeks
+  group_by(user_id) %>%                   # Group by user
+  filter(all(show_coins == 0)) %>%        # Keep only users with all 0s across the weeks
+  distinct(user_id) %>%
+  pull(user_id)
+
+# Users who used coins directly after the change
+coiners <- stuff %>%
+  group_by(user_id, time_weeks) %>%
+  filter(time_weeks %in% 61:62 & any(show_coins == 1)) %>%
+  distinct(user_id) %>% 
+  pull(user_id)
+
+# Users who went from never showing to showing after the change
+enlightened <- stuff %>%
+  filter(user_id %in% unknowners & user_id %in% coiners) %>%
+  distinct(user_id) %>%
+  pull(user_id)
+
+# Proportion of users who went from not showing coins at all before the change, to showing after change
+length(enlightened) / length(unknowners) # 0.6403509
+
+```
+
+With over about 64% of users who weren't showing coins changing to showing coins after the change, and showing coins is the only way to see if you're going into extended time, this provides some evidence that communication between students about the extended deadline is likely. However! this could also just be due to students curious about if what changes have been made to the coin animation.
+
+If they now show coins more often than not this could be a sign that it is not initial curiosity, since the coin animation hasn't really changed, but rather is being used as a tool for checking the time, which is evidence of it being knowledge they gained from other students.
+
+```{r}
+# Do they show coins more than 1 session
+# Count of show_coin setting for never showers who became showers after the change 
+show_count <- stuff %>%
+  filter(user_id %in% enlightened, time_weeks > 60) %>%
+  group_by(user_id, show_coins) %>%
+  summarize(count = n(), .groups = "drop") 
+
+# Line chart ordered by proportion of showing coins
+show_count %>%
+  group_by(user_id) %>%
+  mutate(total = sum(count),                         
+    prop = sum(count[show_coins == 1]) / total 
+  ) %>%
+  ungroup() %>%
+  mutate(user_id = reorder(user_id, -total, mean)) %>%
+  mutate(user_id = reorder(user_id, -prop, mean)) %>% # Reorder by proportion
+ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coins)) +
+  geom_line() +
+  scale_color_manual(values = c("1" = "red", "0" = "blue"),
+                     labels = c("Showing", "Not Showing"),
+                     name = "Coins") +
+  labs(title = "User Coin Showing Behavior", subtitle = "Ordered by Coins Showing / Total Played", x = "Users", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank()) 
+
+```
+
 
 
 ```{r}
-sum(e_d_logs$session == "learning_goal")
+sum(ed_logs$session == "learning_goal")
 ```
 
 
