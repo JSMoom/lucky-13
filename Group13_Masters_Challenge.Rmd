@@ -28,7 +28,7 @@ library(ggalluvial)
 con <- oefenwebDatabase::connect()
 ```
 
-Grab the data from original database some changes
+Grab the data from original database
 
 ```{r}
 # Create necessary objects
@@ -100,40 +100,7 @@ ed_logs = ed_logs %>%
     response_in_seconds = response_in_seconds / 1000,
     across(all_of(cats), as.factor)
   ) 
-  
-
-```
-
-
-```{r}
-# Finding users that alternate between showing coins and not
-swappers <- ed_logs %>%
-  distinct(user_id, session) %>%       # Get unique choices
-  count(user_id) %>%                    
-  filter(n == 2) %>%                    
-  pull(user_id)
-# 22272 users have swapped at least once
-
-# Finding users that have never swapped between showing coins or not
-not_swappers <- ed_logs %>%
-  filter(!(user_id %in% swappers)) %>%  
-  pull(user_id)
-# 59044 users have never swapped
-
-# Users that don't show coins
-no_shows <- ed_logs %>%
-  filter(user_id %in% not_swappers & show_coins == 0) %>%
-  pull(user_id)
-# 4069 users never showed coins
-
-
-```
-
-
-```{r}
-# Investigating swapping behavior, especially for those swapping to show coins after change
-
-# Put data into weeks form for greater clarity
+# Adding time_weeks column and organizing by user_id then date
 ed_logs <- ed_logs %>%
   group_by(user_id) %>%
   arrange(user_id, date) %>%
@@ -141,7 +108,52 @@ ed_logs <- ed_logs %>%
     difftime(date, start_date, units = "weeks")
   ))) %>%
   mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks)) %>%  # Ensure any negative or 0 values are set to 1
-  ungroup()  
+  ungroup()   
+
+```
+
+
+```{r}
+# Total number of unique users
+num_users <- n_distinct(ed_logs$user_id)
+# 23305
+
+# Finding users that alternate between showing coins and not
+swappers <- ed_logs %>%
+  select(user_id, show_coins) %>%
+  distinct(user_id, show_coins) %>%       # Get unique choices
+  count(user_id) %>%                    
+  filter(n == 2) %>%                    
+  pull(user_id)
+# 11118 users have swapped at least once
+# Proportion
+length(swappers) / num_users # .477065
+
+# Finding users that have never swapped between showing coins or not
+not_swappers <- ed_logs %>%
+  select(user_id, show_coins) %>%
+  distinct(user_id, show_coins) %>%       # Get unique choices
+  count(user_id) %>%                    
+  filter(n == 1) %>%                    
+  pull(user_id)
+# 12187 users have never swapped
+# Proportion
+length(not_swappers) / num_users # .522935
+
+# Users that don't show coins
+no_shows <- ed_logs %>%
+  distinct(user_id, show_coins) %>%
+  filter(user_id %in% not_swappers & show_coins == 0) %>%
+  pull(user_id)
+# 132 users never showed coins
+# Proportion
+length(no_shows) / num_users # .005664021
+
+```
+
+
+```{r}
+# Investigating swapping behavior, especially for those swapping to show coins after change
 
 # Getting data needed for sankey plot
 sankey_data <- ed_logs %>%
@@ -149,11 +161,6 @@ sankey_data <- ed_logs %>%
   filter(user_id %in% swappers) %>%
   mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
 
-#sankey_data <- sankey_data %>%
-#  mutate(difficulty = factor(
-#    difficulty,
-#    levels = c(0, 1, 2),
-#    labels = c("Easy", "Medium", "Hard")))
 
 # Group by individual and interval, then summarize
 sankey_tibble <- sankey_data %>%
@@ -171,7 +178,17 @@ ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = m
   theme(legend.position = "top") +
   labs(x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals", legend = "Mode show_coins")
 ```
-Week 
+Between section 30 and 31 is when the change is made. Which happens to also be paired by a major exodus of students from not showing to then showing, meaning that at least to some extent communication of the feature has occurred outside of personal experience.
+
+```{r}
+# Further checking
+stuff <- ed_logs %>%
+  select(user_id, show_coins, time_weeks) %>%
+  filter(user_id %in% swappers)
+
+sum(stuff$show_coins[stuff$user_id == 1386] == 0)
+```
+
 
 
 ```{r}
