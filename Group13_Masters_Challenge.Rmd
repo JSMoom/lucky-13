@@ -62,8 +62,6 @@ ed_logs <- ed_logs %>%
   rename(date = created) 
 ed_logs$date <-
   as.POSIXct(ed_logs$date, format = "%Y-%m-%d %H:%M:%S")
-
-  
 ```
 
 
