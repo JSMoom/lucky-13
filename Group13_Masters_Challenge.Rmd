@@ -252,7 +252,256 @@ ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coin
 sum(ed_logs$session == "learning_goal")
 ```
 
+### DESCRIPTIVES
+```{r}
+# Check the structure and unique values in domain_id
+str(ed_logs)
+unique(ed_logs$domain_id)
 
+# Add a new variable indicating whether the response was late
+# late_response: 1 indicates late response, 0 indicates on-time response
+ed_logs <- ed_logs %>%
+  mutate(late_response = ifelse(response_in_seconds > deadline, 1, 0))
+
+# Show the earliest and latest date in the dataset
+earliest_date <- min(ed_logs$date, na.rm = TRUE)
+latest_date <- max(ed_logs$date, na.rm = TRUE)
+print(paste("Earliest date:", earliest_date))
+print(paste("Latest date:", latest_date))
+
+# Split the data into before and after October 25, 2024
+split_date <- as.Date("2024-10-25")
+# Filter records after the split date
+ed_logs_after <- ed_logs %>%
+  filter(date > split_date)
+
+# Count the occurrences of each value in the late_response column (only for after October 25, 2024)
+# late_response: 1 = late, 0 = on-time
+late_response_counts_after <- ed_logs_after %>%
+  count(late_response) 
+
+# Display late_response counts (after October 25, 2024)
+print(late_response_counts_after) #244202 late
+
+# Count unique users that provided late responses (in total)
+unique_late_users_total <- ed_logs %>%
+  filter(late_response == 1) %>%
+  summarize(unique_users = n_distinct(user_id))
+print(paste("Total unique users with late responses:", unique_late_users_total$unique_users)) # 18444
+
+# Count unique users that provided late responses per domain
+unique_late_users_by_domain <- ed_logs %>%
+  filter(late_response == 1) %>%
+  group_by(domain_id) %>%
+  summarize(unique_users = n_distinct(user_id)) %>%
+  arrange(desc(unique_users))
+
+# Display the unique late users per domain
+print(unique_late_users_by_domain) # 8453 for 59  
+
+# Analysis for users who provided late responses
+late_users <- ed_logs %>%
+  filter(late_response == 1)
+
+# Frequency of late responses after October 25, 2024, compared to all responses
+late_response_frequency <- ed_logs_after %>%
+  filter(user_id %in% late_users$user_id) %>%
+  group_by(user_id) %>%
+  summarize(
+    late_responses_after = sum(late_response),
+    total_responses_after = n(),
+    late_response_rate_after = mean(late_response)
+  )
+print("Late response frequency after October 25, 2024:")
+print(late_response_frequency) # difficult to summarize in one sentence but some kids indeed use it often
+
+
+# Percentage of correct answers when responses are late per domain
+# correct_answered: "1" = correct, "0" = incorrect
+correct_answers_late <- late_users %>%
+  group_by(domain_id) %>%
+  summarize(
+    total_late_responses = n(),
+    correct_late_responses = sum(correct_answered == "1"),
+    correct_percentage_late = mean(correct_answered == "1")
+  )
+print("Percentage of correct answers when responses are late per domain:")
+print(correct_answers_late) # almost 60% of late answers in domain 5 and 59 are correct
+
+
+# Calculate the proportion of late responses per domain
+late_response_by_domain <- ed_logs %>%
+  group_by(domain_id) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  ) %>%
+  arrange(desc(late_response_rate))
+
+# Display the summary table
+print(late_response_by_domain) # it's not much compared to total answers per domain yet but you can see a trend on which domains are more affected
+
+# Visualize late response rates by domain
+late_response_by_domain %>%
+  ggplot(aes(x = fct_reorder(domain_id, late_response_rate), y = late_response_rate)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Late Response Rate by Domain",
+    x = "Domain ID",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Analyze the relationship between difficulty and late responses
+# difficulty: categorical variable indicating task difficulty level
+# late_response: 1 = late, 0 = on-time
+difficulty_analysis <- ed_logs %>%
+  group_by(difficulty) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+
+# Display the summary table
+print(difficulty_analysis)
+
+# Visualize late response rates by difficulty
+difficulty_analysis %>%
+  ggplot(aes(x = difficulty, y = late_response_rate)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Late Response Rate by Difficulty Level",
+    x = "Difficulty Level",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Explore the trend of late responses over time (weekly)
+late_response_time_trend <- ed_logs %>%
+  mutate(week = lubridate::floor_date(date, "week")) %>%
+  group_by(week) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+
+# Visualize the trend
+late_response_time_trend %>%
+  ggplot(aes(x = week, y = late_response_rate)) +
+  geom_line(color = "blue") +
+  labs(
+    title = "Trend of Late Responses Over Time",
+    x = "Week",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Temporal Patterns
+# Late Response by Hour of Day
+# hour: extracted from the timestamp to analyze time-based patterns
+late_response_by_hour <- ed_logs %>%
+  mutate(hour = hour(date)) %>%
+  group_by(hour) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+print("Late Response Rate by Hour of Day:")
+print(late_response_by_hour)
+
+late_response_by_hour %>%
+  ggplot(aes(x = hour, y = late_response_rate)) +
+  geom_line() +
+  labs(
+    title = "Late Response Rate by Hour of Day",
+    x = "Hour of Day",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Late Response by Day of the Week
+# weekday: extracted as a categorical label for days of the week
+late_response_by_day <- ed_logs %>%
+  mutate(weekday = wday(date, label = TRUE)) %>%
+  group_by(weekday) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+print("Late Response Rate by Day of the Week:")
+print(late_response_by_day)
+
+late_response_by_day %>%
+  ggplot(aes(x = weekday, y = late_response_rate)) +
+  geom_col(fill = "skyblue") +
+  labs(
+    title = "Late Response Rate by Day of the Week",
+    x = "Day of the Week",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Behavioral Patterns: Consecutive Late Responses
+# streak: counts consecutive late responses for each user
+consecutive_late_responses <- ed_logs %>%
+  arrange(user_id, date) %>%
+  group_by(user_id) %>%
+  mutate(streak = cumsum(c(0, diff(late_response)) > 0)) %>%
+  filter(late_response == 1) %>%
+  summarize(max_streak = max(streak))
+print("Max Consecutive Late Responses by User:")
+print(consecutive_late_responses)
+
+# Impact of Late Responses: Time Spent
+# Analyze average and total time spent based on response timeliness
+impact_time_spent <- ed_logs %>%
+  group_by(late_response) %>%
+  summarize(
+    avg_time_spent = mean(response_in_seconds, na.rm = TRUE),
+    total_time_spent = sum(response_in_seconds, na.rm = TRUE)
+  )
+print("Average and Total Time Spent by Late Response:")
+print(impact_time_spent)
+
+# Engagement Over Time
+# session_week: groups responses by week for trend analysis
+engagement_trend <- ed_logs %>%
+  mutate(session_week = floor_date(date, "week")) %>%
+  group_by(session_week, late_response) %>%
+  summarize(total_responses = n()) %>%
+  spread(late_response, total_responses, fill = 0)
+print("Engagement Trend Over Time by Late Response:")
+print(engagement_trend)
+
+# Domain-Specific Analysis with Difficulty Interaction
+# Analyze interaction between domain_id and difficulty for late responses
+late_response_by_domain_difficulty <- ed_logs %>%
+  group_by(domain_id, difficulty) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+print("Late Response Rate by Domain and Difficulty:")
+print(late_response_by_domain_difficulty)
+
+late_response_by_domain_difficulty %>%
+  ggplot(aes(x = difficulty, y = late_response_rate, fill = domain_id)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Late Response Rate by Domain and Difficulty",
+    x = "Difficulty",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+```
 
 ```{r}
 oefenwebDatabase::close_connection(con)
