@@ -91,7 +91,8 @@ ed_logs = ed_logs %>%
   rename(response_in_seconds = response_in_milliseconds) %>%
   mutate(deadline = case_when(
     domain_id %in% c(1:4, 7, 10) ~ 20,
-    domain_id %in% c(9, 11) ~ 30,
+    domain_id == 9 ~ 30,
+    domain_id == 11 ~ 60
     domain_id == 5 ~ 8,
     domain_id == 59 & item_id %in% items_5 ~ 5,
     domain_id == 59 & item_id %in% items_10 ~ 10,
