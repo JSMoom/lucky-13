@@ -1,0 +1,456 @@
+---
+title: "Untitled"
+author: "Ender Alexandru, Laura Fetz, Jessee Moomey"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# Loading packages
+library(cowplot)
+library(plotly)
+library(gridExtra)
+library(tidyverse)
+library(devtools)
+library(oefenwebDatabase)
+library(oefenwebTools)
+library(lme4)
+library(lmerTest)
+library(lubridate)
+library(DBI)
+library(ggalluvial)
+# Establishing connection with oefenweb
+con <- oefenwebDatabase::connect()
+```
+
+Grab the data from original database
+
+```{r}
+# Create necessary objects
+ed_logs <- list()
+domains <- c(1:5, 7, 9, 10, 11, 59)
+change_date <- as.Date("2024-10-25")
+start_date <- as.Date("2023-09-01")
+
+# Loop through each E_D table
+for (i in 1:10) {
+  # Write SQL query to get data, and convert to seconds
+  query <- paste0("SELECT *
+                   FROM extended_deadline_logs_", domains[i])
+  # Get the data and store it in the list
+  ed_logs[[i]] <- suppressWarnings(DBI::dbGetQuery(con, query))
+}
+
+# Turn the list into a single df
+ed_logs <- bind_rows(ed_logs)
+
+# Getting deadlines for items in 59
+query <- paste0("SELECT id AS item_id,
+                 maximum_response_in_seconds AS deadline
+                 FROM extended_deadline_items
+                 WHERE domain_id = 59")
+  # Get the data and store it in the list
+deadlines_59 <- suppressWarnings(DBI::dbGetQuery(con, query))
+
+# Convert created to date and into POSIXct format
+ed_logs <- ed_logs %>%
+  rename(date = created) 
+ed_logs$date <-
+  as.POSIXct(ed_logs$date, format = "%Y-%m-%d %H:%M:%S")
+```
+
+
+```{r}
+# Getting item deadlines for domain 59
+items_5 <- deadlines_59 %>%
+  filter(deadline == 5) %>%
+  pull(item_id)
+
+items_10 <- deadlines_59 %>%
+  filter(deadline == 10) %>%
+  pull(item_id)
+
+items_15 <- deadlines_59 %>%
+  filter(deadline == 15) %>%
+  pull(item_id)
+
+items_20 <- deadlines_59 %>%
+  filter(deadline == 20) %>%
+  pull(item_id)
+
+# Categorical columns
+cats <- colnames(ed_logs[,c(8:11, 14:15)])
+
+# Adjustments to data
+ed_logs = ed_logs %>%
+  rename(response_in_seconds = response_in_milliseconds) %>%
+  mutate(deadline = case_when(
+    domain_id %in% c(1:4, 7, 10) ~ 20,
+    domain_id %in% c(9, 11) ~ 30,
+    domain_id == 5 ~ 8,
+    domain_id == 59 & item_id %in% items_5 ~ 5,
+    domain_id == 59 & item_id %in% items_10 ~ 10,
+    domain_id == 59 & item_id %in% items_15 ~ 15,
+    domain_id == 59 & item_id %in% items_20 ~ 20),
+    response_in_seconds = response_in_seconds / 1000,
+    across(all_of(cats), as.factor)
+  ) 
+# Adding time_weeks column and organizing by user_id then date
+ed_logs <- ed_logs %>%
+  group_by(user_id) %>%
+  arrange(user_id, date) %>%
+  mutate(time_weeks = ceiling(as.numeric(
+    difftime(date, start_date, units = "weeks")
+  ))) %>%
+  mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks)) %>%  # Ensure any negative or 0 values are set to 1
+  ungroup()   
+
+```
+
+
+```{r}
+# Total number of unique users
+num_users <- n_distinct(ed_logs$user_id)
+# 23305
+
+# Finding users that alternate between showing coins and not
+swappers <- ed_logs %>%
+  select(user_id, show_coins) %>%
+  distinct(user_id, show_coins) %>%       # Get unique choices
+  count(user_id) %>%                    
+  filter(n == 2) %>%                    
+  pull(user_id)
+# 11118 users have swapped at least once
+# Proportion
+length(swappers) / num_users # .477065
+
+# Finding users that have never swapped between showing coins or not
+not_swappers <- ed_logs %>%
+  select(user_id, show_coins) %>%
+  distinct(user_id, show_coins) %>%       # Get unique choices
+  count(user_id) %>%                    
+  filter(n == 1) %>%                    
+  pull(user_id)
+# 12187 users have never swapped
+# Proportion
+length(not_swappers) / num_users # .522935
+
+# Users that don't show coins
+no_shows <- ed_logs %>%
+  distinct(user_id, show_coins) %>%
+  filter(user_id %in% not_swappers & show_coins == 0) %>%
+  pull(user_id)
+# 132 users never showed coins
+# Proportion
+length(no_shows) / num_users # .005664021
+
+```
+
+
+```{r}
+# Investigating swapping behavior, especially for those swapping to show coins after change
+
+# Getting data needed for sankey plot
+sankey_data <- ed_logs %>%
+  select(user_id, show_coins, time_weeks) %>%
+  filter(user_id %in% swappers) %>%
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
+
+
+# Group by individual and interval, then summarize
+sankey_tibble <- sankey_data %>%
+  group_by(user_id, interval) %>%
+  summarize(mode_show_coins = names(which.max(table(show_coins)))) %>%
+  ungroup()
+
+# Make the plot
+sankey_tibble %>%
+ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  theme_minimal() +
+  #scale_fill_manual(values = color_scheme2) +
+  geom_flow(color = "darkgray") +
+  geom_stratum() +
+  theme(legend.position = "top") +
+  labs(x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals", legend = "Mode show_coins")
+```
+Between section 30 and 31 is when the change is made. Which happens to also be paired by a major exodus of students from not showing to then showing, meaning that at least to some extent communication of the feature has occurred outside of personal experience.
+
+```{r}
+# Further checking
+stuff <- ed_logs %>%
+  select(user_id, show_coins, time_weeks) %>%
+  filter(user_id %in% swappers)
+
+sum(stuff$show_coins[stuff$user_id == 1386] == 0)
+```
+
+
+
+```{r}
+sum(ed_logs$session == "learning_goal")
+```
+
+### DESCRIPTIVES
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(lubridate)
+
+# Check the structure and unique values in domain_id
+str(ed_logs)
+unique(ed_logs$domain_id)
+
+# Add a new variable indicating whether the response was late
+# late_response: 1 indicates late response, 0 indicates on-time response
+ed_logs <- ed_logs %>%
+  mutate(late_response = ifelse(response_in_seconds > deadline, 1, 0))
+
+# Show the earliest and latest date in the dataset
+earliest_date <- min(ed_logs$date, na.rm = TRUE)
+latest_date <- max(ed_logs$date, na.rm = TRUE)
+print(paste("Earliest date:", earliest_date))
+print(paste("Latest date:", latest_date))
+
+# Split the data into before and after October 25, 2024
+split_date <- as.Date("2024-10-25")
+# Filter records after the split date
+ed_logs_after <- ed_logs %>%
+  filter(date > split_date)
+
+# Count the occurrences of each value in the late_response column (only for after October 25, 2024)
+# late_response: 1 = late, 0 = on-time
+late_response_counts_after <- ed_logs_after %>%
+  count(late_response) 
+
+# Display late_response counts (after October 25, 2024)
+print(late_response_counts_after) #244202 late
+
+# Count unique users that provided late responses (in total)
+unique_late_users_total <- ed_logs %>%
+  filter(late_response == 1) %>%
+  summarize(unique_users = n_distinct(user_id))
+print(paste("Total unique users with late responses:", unique_late_users_total$unique_users)) # 18444
+
+# Count unique users that provided late responses per domain
+unique_late_users_by_domain <- ed_logs %>%
+  filter(late_response == 1) %>%
+  group_by(domain_id) %>%
+  summarize(unique_users = n_distinct(user_id)) %>%
+  arrange(desc(unique_users))
+
+# Display the unique late users per domain
+print(unique_late_users_by_domain) # 8453 for 59  
+
+# Analysis for users who provided late responses
+late_users <- ed_logs %>%
+  filter(late_response == 1)
+
+# Frequency of late responses after October 25, 2024, compared to all responses
+late_response_frequency <- ed_logs_after %>%
+  filter(user_id %in% late_users$user_id) %>%
+  group_by(user_id) %>%
+  summarize(
+    late_responses_after = sum(late_response),
+    total_responses_after = n(),
+    late_response_rate_after = mean(late_response)
+  )
+print("Late response frequency after October 25, 2024:")
+print(late_response_frequency) # difficult to summarize in one sentence but some kids indeed use it often
+
+
+# Percentage of correct answers when responses are late per domain
+# correct_answered: "1" = correct, "0" = incorrect
+correct_answers_late <- late_users %>%
+  group_by(domain_id) %>%
+  summarize(
+    total_late_responses = n(),
+    correct_late_responses = sum(correct_answered == "1"),
+    correct_percentage_late = mean(correct_answered == "1")
+  )
+print("Percentage of correct answers when responses are late per domain:")
+print(correct_answers_late) # almost 60% of late answers in domain 5 and 59 are correct
+
+
+# Calculate the proportion of late responses per domain
+late_response_by_domain <- ed_logs %>%
+  group_by(domain_id) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  ) %>%
+  arrange(desc(late_response_rate))
+
+# Display the summary table
+print(late_response_by_domain) # it's not much compared to total answers per domain yet but you can see a trend on which domains are more affected
+
+# Visualize late response rates by domain
+late_response_by_domain %>%
+  ggplot(aes(x = fct_reorder(domain_id, late_response_rate), y = late_response_rate)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Late Response Rate by Domain",
+    x = "Domain ID",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Analyze the relationship between difficulty and late responses
+# difficulty: categorical variable indicating task difficulty level
+# late_response: 1 = late, 0 = on-time
+difficulty_analysis <- ed_logs %>%
+  group_by(difficulty) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+
+# Display the summary table
+print(difficulty_analysis)
+
+# Visualize late response rates by difficulty
+difficulty_analysis %>%
+  ggplot(aes(x = difficulty, y = late_response_rate)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Late Response Rate by Difficulty Level",
+    x = "Difficulty Level",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Explore the trend of late responses over time (weekly)
+late_response_time_trend <- ed_logs %>%
+  mutate(week = lubridate::floor_date(date, "week")) %>%
+  group_by(week) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+
+# Visualize the trend
+late_response_time_trend %>%
+  ggplot(aes(x = week, y = late_response_rate)) +
+  geom_line(color = "blue") +
+  labs(
+    title = "Trend of Late Responses Over Time",
+    x = "Week",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Temporal Patterns
+# Late Response by Hour of Day
+# hour: extracted from the timestamp to analyze time-based patterns
+late_response_by_hour <- ed_logs %>%
+  mutate(hour = hour(date)) %>%
+  group_by(hour) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+print("Late Response Rate by Hour of Day:")
+print(late_response_by_hour)
+
+late_response_by_hour %>%
+  ggplot(aes(x = hour, y = late_response_rate)) +
+  geom_line() +
+  labs(
+    title = "Late Response Rate by Hour of Day",
+    x = "Hour of Day",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Late Response by Day of the Week
+# weekday: extracted as a categorical label for days of the week
+late_response_by_day <- ed_logs %>%
+  mutate(weekday = wday(date, label = TRUE)) %>%
+  group_by(weekday) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+print("Late Response Rate by Day of the Week:")
+print(late_response_by_day)
+
+late_response_by_day %>%
+  ggplot(aes(x = weekday, y = late_response_rate)) +
+  geom_col(fill = "skyblue") +
+  labs(
+    title = "Late Response Rate by Day of the Week",
+    x = "Day of the Week",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+# Behavioral Patterns: Consecutive Late Responses
+# streak: counts consecutive late responses for each user
+consecutive_late_responses <- ed_logs %>%
+  arrange(user_id, date) %>%
+  group_by(user_id) %>%
+  mutate(streak = cumsum(c(0, diff(late_response)) > 0)) %>%
+  filter(late_response == 1) %>%
+  summarize(max_streak = max(streak))
+print("Max Consecutive Late Responses by User:")
+print(consecutive_late_responses)
+
+# Impact of Late Responses: Time Spent
+# Analyze average and total time spent based on response timeliness
+impact_time_spent <- ed_logs %>%
+  group_by(late_response) %>%
+  summarize(
+    avg_time_spent = mean(response_in_seconds, na.rm = TRUE),
+    total_time_spent = sum(response_in_seconds, na.rm = TRUE)
+  )
+print("Average and Total Time Spent by Late Response:")
+print(impact_time_spent)
+
+# Engagement Over Time
+# session_week: groups responses by week for trend analysis
+engagement_trend <- ed_logs %>%
+  mutate(session_week = floor_date(date, "week")) %>%
+  group_by(session_week, late_response) %>%
+  summarize(total_responses = n()) %>%
+  spread(late_response, total_responses, fill = 0)
+print("Engagement Trend Over Time by Late Response:")
+print(engagement_trend)
+
+# Domain-Specific Analysis with Difficulty Interaction
+# Analyze interaction between domain_id and difficulty for late responses
+late_response_by_domain_difficulty <- ed_logs %>%
+  group_by(domain_id, difficulty) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = mean(late_response)
+  )
+print("Late Response Rate by Domain and Difficulty:")
+print(late_response_by_domain_difficulty)
+
+late_response_by_domain_difficulty %>%
+  ggplot(aes(x = difficulty, y = late_response_rate, fill = domain_id)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Late Response Rate by Domain and Difficulty",
+    x = "Difficulty",
+    y = "Late Response Rate"
+  ) +
+  theme_minimal()
+
+```
+
+
+```{r}
+oefenwebDatabase::close_connection(con)
+```
