@@ -504,6 +504,117 @@ late_response_by_domain_difficulty %>%
 
 ```
 
+
+
+
+Ender: analyzing growth slopes in the first 2 months of 2024 (Sep-Oct 25) to growth slopes after the change (Oct 25 - Dec)
+
+```{r}
+### Checking amount of items played in the two periods, per domain ###
+
+items_played <- ed_logs %>%
+  mutate(period = case_when(
+    date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
+    date > "2024-10-25 23:59:59" ~ "Oct-Dec",
+    TRUE ~ "other")) %>%
+  group_by(domain_id, period) %>%
+  summarize(items_played = n()) %>%
+  filter(period != "other") %>%
+  arrange(domain_id, desc(period))
+
+items_played %>%
+  ggplot(aes(x = domain_id, y = items_played, fill = period)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Items Played by Domain and Period", x = "Domain", y = "Items Played")
+```
+
+Data structuring for multilevel analysis
+
+```{r}
+# Create period variable
+period_logs <- ed_logs %>%
+  mutate(period = case_when(
+    date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
+    date > "2024-10-25 23:59:59" ~ "Oct-Dec",
+    TRUE ~ "other")) %>%
+  filter(period != "other") %>%
+  filter(!is.na(new_user_domain_q_score))
+
+# Structure data to have a Q-score for every session entry
+multilevel_data <- period_logs %>%
+  arrange(user_id, period, domain_id, new_user_domain_session_count, new_user_domain_modified_count) %>%
+  group_by(user_id, period, domain_id, new_user_domain_session_count) %>%
+  summarize(q_score = last(new_user_domain_q_score), .groups = "drop") %>%
+  # need to re-attach grade & difficulty to data
+  left_join(period_logs %>%
+              select(user_id, period, grade, domain_id, difficulty, new_user_domain_session_count,
+                     new_user_domain_modified_count),
+            by = c("user_id", "period", "domain_id", "new_user_domain_session_count"))
+
+# Re-number sessions to start from 1 (for each period separately)
+multilevel_data_unique <- multilevel_data %>%
+  distinct(user_id, period, domain_id, new_user_domain_session_count, .keep_all = TRUE) %>%
+  group_by(user_id, period, domain_id) %>%
+  mutate(session = row_number()) %>%
+  ungroup() %>%
+  select(-new_user_domain_modified_count, -new_user_domain_session_count)
+
+# Check observation nr per grade, domain
+table(multilevel_data_unique$grade)
+table(multilevel_data_unique$domain_id)
+
+# Remove data for grades 1, 2, and 9-19
+multilevel_data_unique$grade <- as.integer(multilevel_data_unique$grade)
+multilevel_data_unique <- multilevel_data_unique %>%
+  filter(!(grade == 1) & !(grade == 2) & !(grade >= 9 & grade <= 19))
+
+multilevel_data_unique$difficulty <- as.factor(multilevel_data_unique$difficulty)
+multilevel_data_unique$period <- as.factor(multilevel_data_unique$period)
+multilevel_data_unique$domain_id <- as.factor(multilevel_data_unique$domain_id)
+multilevel_data_unique$grade <- as.factor(multilevel_data_unique$grade)
+
+# Remove sessions over 20
+multilevel_data_unique <- multilevel_data_unique %>%
+  filter(session <= 20)
+
+# Scale session & q_score
+multilevel_data_unique <- multilevel_data_unique %>%
+  mutate(session = scale(session)) %>%
+  group_by(domain_id) %>%
+  mutate(q_score = scale(q_score)) %>%
+  ungroup()
+```
+
+```{r}
+### Multilevel Analysis ###
+
+# Simpler model; no interactions between growth slopes, domains and grades
+simple_model <- lmer(
+  q_score ~ session * period + session * difficulty + grade + domain_id +
+  (1 + session | user_id),
+  data = multilevel_data_unique,
+  control = lmerControl(optCtrl = list(maxfun = 10000))
+)
+
+# Complex model: allows for interactions between growth slopes, domains and grades
+full_model <- lmer(
+  q_score ~ session * period * domain_id * grade + session * difficulty +
+  (1 + session | user_id),
+  data = multilevel_data_unique,
+  control = lmerControl(optCtrl = list(maxfun = 10000))
+)
+
+summary(full_model)
+
+```
+
+```{r}
+# Comparing simple vs complex model
+anova(simple_model, full_model)
+```
+
+
 ```{r}
 oefenwebDatabase::close_connection(con)
 ```
