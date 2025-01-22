@@ -204,28 +204,53 @@ anova(intervention_1, intervention_2)
 
 ```{r}
 # Plotting slopes for different periods (across domains, grades, difficulties)
-multilevel_data_unique$predicted_q_score <- predict(intervention_2)
 
-# Plot difference in growth between the 2 periods (across domains, grades, difficulties)
-ggplot(multilevel_data_unique, aes(x = session, y = q_score, color = period)) +
-  geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+# Create a grid for prediction
+prediction_grid <- expand.grid(
+  session_scaled = seq(min(multilevel_data_unique$session_scaled), max(multilevel_data_unique$session_scaled), length.out = 20),
+  period = unique(multilevel_data_unique$period),
+  grade = unique(multilevel_data_unique$grade),
+  domain_id = unique(multilevel_data_unique$domain_id),
+  difficulty = unique(multilevel_data_unique$difficulty),
+  user_id = "dummy_user")
+  # necessary to include dummy user id, as it's needed for predict() algorithm
+  # however, specific user random effects won't be used in making predictions
+  # as allow.new.levels = TRUE allows predictions based on fixed effects only
+
+# Add predictions to the grid
+prediction_grid$predicted_q_score <- predict(intervention_2, newdata = prediction_grid, allow.new.levels = TRUE)
+
+# Aggregate over all other unnecessary variables (for this plot)
+prediction_summary <- prediction_grid %>%
+  group_by(session_scaled, period) %>%
+  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+
+
+### Main plot - Difference in Ability Growth Between the 2 Periods ###
+ggplot(prediction_summary, aes(x = session_scaled, y = predicted_q_score, color = period)) +
+  geom_line(aes(group = period), size = 1.2) +
   theme_minimal() +
   labs(
-    title = "Relationship between Session and Q-Score by Period",
+    title = "Difference in Growth Slope Over 20 Sessions: Sep-Oct VS Oct-Dec",
     x = "Session",
-    y = "Q-Score",
+    y = "Predicted Q-Score",
     color = "Period"
   ) +
-  scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
+  scale_color_manual(values = c("blue", "red")) +
   theme(legend.position = "top")
 ```
 
 ```{r}
 # Plots for different domains
 domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
+
+prediction_summary <- prediction_grid %>%
+  group_by(period, domain_id, session_scaled) %>%
+  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+
 for (i in domains){
-  p <- ggplot(multilevel_data_unique[multilevel_data_unique$domain_id == i,], aes(x = session, y = q_score, color = period)) +
-    geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+  p <- ggplot(prediction_summary[prediction_summary$domain_id == i,], aes(x = session_scaled, y = predicted_q_score, color = period))+
+    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
     theme_minimal() +
     labs(
       title = paste("Relationship between Session and Q-Score by Period, Domain", i),
@@ -242,9 +267,14 @@ for (i in domains){
 ```{r}
 # Plots for different grades
 grades <- c(3, 4, 5, 6, 7, 8)
+
+prediction_summary <- prediction_grid %>%
+  group_by(period, grade, session_scaled) %>%
+  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+
 for (i in grades){
-  p <- ggplot(multilevel_data_unique[multilevel_data_unique$grade == i,], aes(x = session, y = q_score, color = period)) +
-    geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+  p <- ggplot(prediction_summary[prediction_summary$grade == i,], aes(x = session_scaled, y = predicted_q_score, color = period)) +
+    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
     theme_minimal() +
     labs(
       title = paste("Relationship between Session and Q-Score by Period, Grade", i),
@@ -263,13 +293,17 @@ for (i in grades){
 grades <- c(3, 4, 5, 6, 7, 8)
 domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
 
+prediction_summary <- prediction_grid %>%
+  group_by(period, domain_id, grade, session_scaled) %>%
+  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+
 for (i in grades) {
   for (j in domains) {
     
     # Create the plot
-    p <- ggplot(multilevel_data_unique[multilevel_data_unique$grade == i & multilevel_data_unique$domain_id == j,],
-                aes(x = session, y = q_score, color = period)) +
-      geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+    p <- ggplot(prediction_summary[prediction_summary$grade == i & prediction_summary$domain_id == j,],
+                aes(x = session_scaled, y = predicted_q_score, color = period)) +
+      geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
       theme_minimal() +
       labs(
         title = paste("Relationship between Session and Q-Score by Period, Grade", i, "Domain", j),
