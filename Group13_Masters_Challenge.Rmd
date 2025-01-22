@@ -110,6 +110,7 @@ multilevel_data <- period_logs %>%
                      new_user_domain_modified_count),
             by = c("user_id", "period", "domain_id", "new_user_domain_session_count"))
 
+
 # Re-number sessions to start from 1 (for each period separately)
 multilevel_data_unique <- multilevel_data %>%
   distinct(user_id, period, domain_id, new_user_domain_session_count, .keep_all = TRUE) %>%
@@ -138,38 +139,169 @@ multilevel_data_unique <- multilevel_data_unique %>%
 
 # Scale session & q_score
 multilevel_data_unique <- multilevel_data_unique %>%
-  mutate(session = scale(session)) %>%
+  mutate(session_scaled = scale(session)) %>%
   group_by(domain_id) %>%
-  mutate(q_score = scale(q_score)) %>%
+  mutate(q_score_scaled = scale(q_score)) %>%
   ungroup()
 ```
 
 ```{r}
-### Multilevel Analysis ###
-
-# Simpler model; no interactions between growth slopes, domains and grades
-simple_model <- lmer(
-  q_score ~ session * period + session * difficulty + grade + domain_id +
-  (1 + session | user_id),
-  data = multilevel_data_unique,
-  control = lmerControl(optCtrl = list(maxfun = 10000))
+### Multilevel Analyses ###
+# Models were tested sequentially; intervention_2 fits best
+fixed_slopes <- lmer(
+  q_score_scaled ~ 1 + session_scaled + (1 | user_id),
+  REML = F, data = multilevel_data_unique
 )
 
-# Complex model: allows for interactions between growth slopes, domains and grades
-full_model <- lmer(
-  q_score ~ session * period * domain_id * grade + session * difficulty +
-  (1 + session | user_id),
-  data = multilevel_data_unique,
-  control = lmerControl(optCtrl = list(maxfun = 10000))
+random_slopes <- lmer(
+  q_score_scaled ~ 1 + session_scaled + (1 + session_scaled | user_id),
+  REML = F, data = multilevel_data_unique
 )
 
-summary(full_model)
+domain <- lmer(
+  q_score_scaled ~ 1 + session_scaled + domain_id + (1 + session_scaled | user_id),
+  REML = F, data = multilevel_data_unique
+) # better fit than with session:domain_id
 
+grade <- lmer(
+  q_score_scaled ~ 1 + session_scaled + domain_id + grade + (1 + session_scaled | user_id),
+  REML = F, data = multilevel_data_unique
+) # does not converge with session:grade
+
+difficulty <- lmer(
+  q_score_scaled ~ 1 + session_scaled:difficulty + domain_id + grade + (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique
+) # does not work with session*difficulty
+
+diff_domain_grade <- lmer(
+  q_score_scaled ~ 1 + session_scaled:difficulty + domain_id + grade + session_scaled:domain_id + session_scaled:grade + 
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique
+) # best to include main effects
+
+intervention_1 <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period + session_scaled:difficulty + domain_id + grade + 
+    session_scaled:domain_id + session_scaled:grade + (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique
+)
+
+intervention_2 <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period + session_scaled:difficulty + domain_id + grade + 
+    session_scaled:domain_id:period + session_scaled:grade:period + (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique
+)
+
+summary(intervention_2)
+anova(intervention_1, intervention_2)
+
+# Best model is intervention_2; results are basically the same with intervention_1
+# Results show that the slope of growth is larger in the period Oct-Dec
 ```
 
 ```{r}
-# Comparing simple vs complex model
-anova(simple_model, full_model)
+# Plotting slopes for different periods (across domains, grades, difficulties)
+multilevel_data_unique$predicted_q_score <- predict(intervention_2)
+
+# Plot difference in growth between the 2 periods (across domains, grades, difficulties)
+ggplot(multilevel_data_unique, aes(x = session, y = q_score, color = period)) +
+  geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+  theme_minimal() +
+  labs(
+    title = "Relationship between Session and Q-Score by Period",
+    x = "Session",
+    y = "Q-Score",
+    color = "Period"
+  ) +
+  scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
+  theme(legend.position = "top")
+```
+
+```{r}
+# Plots for different domains
+domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
+for (i in domains){
+  p <- ggplot(multilevel_data_unique[multilevel_data_unique$domain_id == i,], aes(x = session, y = q_score, color = period)) +
+    geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+    theme_minimal() +
+    labs(
+      title = paste("Relationship between Session and Q-Score by Period, Domain", i),
+      x = "Session",
+      y = "Q-Score",
+      color = "Period"
+    ) +
+    scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
+    theme(legend.position = "top")
+  print(p)
+}
+```
+
+```{r}
+# Plots for different grades
+grades <- c(3, 4, 5, 6, 7, 8)
+for (i in grades){
+  p <- ggplot(multilevel_data_unique[multilevel_data_unique$grade == i,], aes(x = session, y = q_score, color = period)) +
+    geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+    theme_minimal() +
+    labs(
+      title = paste("Relationship between Session and Q-Score by Period, Grade", i),
+      x = "Session",
+      y = "Q-Score",
+      color = "Period"
+    ) +
+    scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
+    theme(legend.position = "top")
+  print(p)
+}
+```
+
+```{r}
+# Plots for all combinations of grades and domains
+grades <- c(3, 4, 5, 6, 7, 8)
+domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
+
+for (i in grades) {
+  for (j in domains) {
+    
+    # Create the plot
+    p <- ggplot(multilevel_data_unique[multilevel_data_unique$grade == i & multilevel_data_unique$domain_id == j,],
+                aes(x = session, y = q_score, color = period)) +
+      geom_smooth(method = "lm", aes(group = period), se = FALSE, linetype = "solid") +  # Fit line for each period
+      theme_minimal() +
+      labs(
+        title = paste("Relationship between Session and Q-Score by Period, Grade", i, "Domain", j),
+        x = "Session",
+        y = "Q-Score",
+        color = "Period"
+      ) +
+      scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
+      theme(legend.position = "top")
+
+    # Print the plot
+    print(p)
+  }
+}
+```
+
+```{r}
+##### WRONG #####
+# Calculating percentages of correct answers per difficulty, between periods
+difficulty_logs <- ed_logs %>%
+  mutate(period = case_when(
+    date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
+    date > "2024-10-25 23:59:59" ~ "Oct-Dec",
+    TRUE ~ "other"))
+
+difficulty_logs$correct_answered = as.integer(difficulty_logs$correct_answered)
+difficulty_logs <- difficulty_logs %>%
+  group_by(domain_id, difficulty) %>%
+  summarize(percentage_correct = sum(correct_answered == 1) / n())
+# easiest difficulty has smallest percentage correct, followed by medium, then hard
+# the code here also includes data where the q_score is NA;
+# but results are the same, regardless of what data you choose
 ```
 
 ```{r}
