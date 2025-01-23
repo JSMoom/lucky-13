@@ -247,6 +247,224 @@ ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coin
 
 ```
 
+We see that the majority of those who switched coins on, most of the time kept coins on which is a substantial change from their previous behavior.
+
+
+```{r}
+# Change in difficulty selection data
+# Getting data needed for sankey plot
+sankey_data <- ed_logs %>%
+  select(user_id, difficulty, time_weeks) %>%
+  filter(time_weeks > 52) %>%
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
+
+sankey_data <- sankey_data %>%
+  mutate(difficulty = factor(
+    difficulty,
+    levels = c(0, 1, 2),
+    labels = c("Easy", "Medium", "Hard")))
+
+# Group by individual and interval, then summarize
+sankey_tibble <- sankey_data %>%
+  group_by(user_id, interval) %>%
+  summarize(mode_difficulty = names(which.max(table(difficulty)))) %>%
+  ungroup()
+
+color_scheme2 <- c(
+  "Easy" = "#008856",
+  "Medium" = "#0067A5",
+  "Hard" = "#BE0032"
+)
+
+```
+
+
+```{r}
+# Change in difficulty selection plot
+# Make the sankey plot
+sankey_tibble %>%
+ggplot(aes(x = interval, stratum = mode_difficulty, alluvium = user_id, fill = mode_difficulty, label = mode_difficulty)) +
+  theme_minimal() +
+  scale_fill_manual(values = color_scheme2) +
+  geom_flow(color = "darkgray") +
+  geom_stratum() +
+  theme(legend.position = "top", 
+        axis.text.x = element_blank()) +
+  labs(x = "2-Week Intervals", y = "Users", title = "Mode Difficulty across 2-Week Intervals", legend = "Mode Difficulty")
+```
+
+A large initial migration to medium difficulty right after the change. A surprising amount from hard, and an understandable amount from easy. Curiously, after the initial migration there is a consistent move back to hard difficulty for some. The amount of students in easy is noticeably lower after the change. 
+Do these students who have left easy use the extended deadline?
+
+```{r}
+# Extended deadline/difficulty data
+ed_diff_data <- ed_logs %>%
+  select(user_id, difficulty, time_weeks, late_response, answer) %>%
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
+         difficulty = factor(difficulty,
+                             levels = c(0, 1, 2),
+                             labels = c("Easy", "Medium", "Hard"))) %>%
+  filter(interval > 29)
+
+ed_diff_tibble <- ed_diff_data %>%
+  group_by(user_id, interval) %>%
+  summarize(mode_difficulty = names(which.max(table(difficulty))),
+            extended_deadline_total = sum(late_response == 1 & answer != "…"),
+            non_response_total = sum(answer == "…")) %>%
+  ungroup()
+
+```
+
+```{r}
+# # Interaction of leaving easy and extended deadline
+# braves <- ed_diff_tibble %>%
+#   group_by(user_id) %>%
+#   mutate(first_cat = first(mode_difficulty), 
+#          switched = mode_difficulty != first_cat & interval > 1) %>%
+#   filter(first_cat == "Easy" & any(switched))
+# 
+# # Grouping those who stayed off easy, vs those who didn't
+# switch_tracking <- braves %>%
+#   group_by(user_id) %>%
+#   mutate(first_switch_week = if_else(switched, interval, NA_integer_), # Week of first switch
+#     first_switch_week = min(first_switch_week, na.rm = TRUE), # Get the earliest switch
+#     stay_switched = if_else(                           # Check if they stay switched
+#       interval >= first_switch_week & switched, 
+#       mode_difficulty, 
+#       NA_character_
+#     )
+#   ) 
+# # Sum of late response and stay switch labeled
+# stayers <- switch_tracking %>%
+#   summarise(stayed_switched = if_else(
+#             all(na.omit(stay_switched) == first(na.omit(stay_switched))), 
+#             "Stayed Switched", 
+#             "Did Not Stay Switched"),
+#             extended_deadline_total = sum(extended_deadline_total),
+#             non_response_total = sum(non_response_total)
+#   ) %>%
+#   ungroup()
+```
+
+
+```{r}
+# Getting data for graphing response type and switch type
+# Interaction of leaving easy and extended deadline
+braves_all <- ed_diff_tibble %>%
+  group_by(user_id) %>%
+  mutate(first_cat = first(mode_difficulty), 
+         switched = mode_difficulty != first_cat & interval > 1)
+
+# Grouping and labeling based on switching and starting choices
+switch_tracking_all <- braves_all %>%
+  group_by(user_id) %>%
+  mutate(first_switch_week = if_else(switched, interval, NA_integer_), # Week of first switch
+    first_switch_week = min(first_switch_week, na.rm = TRUE), # Get the earliest switch
+    stay_switched = if_else(                           # Check if they stay switched
+      interval >= first_switch_week & switched, 
+      mode_difficulty, 
+      NA_character_
+    )
+  ) 
+# Groups labeled and response types counted
+stayers_all <- switch_tracking_all %>%
+  summarise(
+    switch_category = case_when(
+      all(na.omit(switched) == first(na.omit(switched))) ~ "Never Switched",
+      first(na.omit(switched)) == last(na.omit(switched)) ~ "Did Not Stay Switched",
+      TRUE ~ "Stayed Switched"
+    ),
+    first_cat = first(mode_difficulty)
+  ) %>%
+  ungroup()
+
+stayers_all <- switch_tracking_all %>%
+  summarise(
+    stayed_switched = case_when(
+      # Never switched: all intervals are NA or the same as the first non-NA value
+      all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Easy" ~ "Never Switched - Easy",
+      all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Medium" ~ "Never Switched - Medium",
+      all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Hard" ~ "Never Switched - Hard",
+      # Did Not Stay Switched: First and last are the same but switched at some point
+      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Easy" ~ "Did Not Stay Switched - Easy",
+      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Medium" ~ "Did Not Stay Switched - Medium",
+      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Hard" ~ "Did Not Stay Switched - Hard",
+      # Stayed Switched: First and last are different
+      first(first_cat) == "Easy" ~ "Stayed Switched - Easy",
+      first(first_cat) == "Medium" ~ "Stayed Switched - Medium",
+      first(first_cat) == "Hard" ~ "Stayed Switched - Hard",
+      # Default case (in case of unexpected values)
+      TRUE ~ "Unknown"
+    )
+  ) %>%
+  ungroup()
+
+# Joining switch labels and ed_logs relevant stuff
+fbg_data <- ed_logs %>%
+  select(user_id, difficulty, time_weeks, late_response, answer, date) %>%
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
+         difficulty = factor(difficulty,
+                             levels = c(0, 1, 2),
+                             labels = c("Easy", "Medium", "Hard"))) %>%
+  group_by(user_id, interval) %>%
+  summarize(mode_difficulty = names(which.max(table(difficulty))),
+            extended_deadline_total = sum(late_response == 1 & answer != "…"),
+            non_response_before = sum(answer == "…" & date < change_date, na.rm = TRUE),
+            non_response_after = sum(answer == "…" & date >= change_date, na.rm = TRUE),
+            .groups = "drop")
+
+  
+collapsed_fgb <- fgb_data %>%
+  group_by(user_id) %>%
+  summarize(
+    extended_deadline_total = sum(extended_deadline_total, na.rm = TRUE),
+    non_response_before = sum(non_response_before, na.rm = TRUE),
+    non_response_after = sum(non_response_after, na.rm = TRUE)
+  ) %>%
+  left_join(stayers_all, by = "user_id") %>%
+  filter(!is.na(stayed_switched))
+
+
+collapsed_long <- collapsed_fgb %>%
+  pivot_longer(cols = c(extended_deadline_total, non_response_before, non_response_after),
+               names_to = "response_type",
+               values_to = "value"
+  ) %>%
+  mutate(stayed_switched = factor(stayed_switched, 
+                                  levels = c("Did Not Stay Switched - Easy", "Did Not Stay Switched - Medium", "Did Not Stay Switched - Hard", "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard", "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard"))
+  )
+```
+
+```{r}
+# Time to graph it
+# Setting Color Scheme
+response_color <- c(
+  "extended_deadline_total" = "#E69F00",
+  "non_response_before" = "#56B4E9",
+  "non_response_after" = "#009E73"
+)
+
+# Faceted bar graph
+ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = response_color) +
+  labs(
+    title = "Response Totals by Difficulty Switching Category",
+    x = "Response Type",
+    y = "Total Responses",
+    fill = "Response Type"
+  ) +
+  theme_minimal() +
+  facet_wrap(~ stayed_switched) +
+  theme(
+    strip.text = element_text(size = 12),
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank()
+  )
+
+```
+
 
 
 ```{r}
