@@ -1,16 +1,5 @@
----
-title: "Untitled"
-author: "Ender Alexandru, Laura Fetz, Jessee Moomey"
-date: "`r Sys.Date()`"
-output: html_document
----
+### Group 13 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-
-```{r}
 # Loading packages
 library(cowplot)
 library(plotly)
@@ -24,13 +13,11 @@ library(lmerTest)
 library(lubridate)
 library(DBI)
 library(ggalluvial)
+library(car)
+
 # Establishing connection with oefenweb
 con <- oefenwebDatabase::connect()
-```
 
-Grab the data from original database
-
-```{r}
 # Create necessary objects
 ed_logs <- list()
 domains <- c(1:5, 7, 9, 10, 11, 59)
@@ -54,7 +41,7 @@ query <- paste0("SELECT id AS item_id,
                  maximum_response_in_seconds AS deadline
                  FROM extended_deadline_items
                  WHERE domain_id = 59")
-  # Get the data and store it in the list
+# Get the data and store it in the list
 deadlines_59 <- suppressWarnings(DBI::dbGetQuery(con, query))
 
 # Convert created to date and into POSIXct format
@@ -62,10 +49,7 @@ ed_logs <- ed_logs %>%
   rename(date = created) 
 ed_logs$date <-
   as.POSIXct(ed_logs$date, format = "%Y-%m-%d %H:%M:%S")
-```
 
-
-```{r}
 # Getting item deadlines for domain 59
 items_5 <- deadlines_59 %>%
   filter(deadline == 5) %>%
@@ -91,7 +75,8 @@ ed_logs = ed_logs %>%
   rename(response_in_seconds = response_in_milliseconds) %>%
   mutate(deadline = case_when(
     domain_id %in% c(1:4, 7, 10) ~ 20,
-    domain_id %in% c(9, 11) ~ 30,
+    domain_id %in% c(9) ~ 30,
+    domain_id %in% c(11) ~ 60,
     domain_id == 5 ~ 8,
     domain_id == 59 & item_id %in% items_5 ~ 5,
     domain_id == 59 & item_id %in% items_10 ~ 10,
@@ -100,6 +85,7 @@ ed_logs = ed_logs %>%
     response_in_seconds = response_in_seconds / 1000,
     across(all_of(cats), as.factor)
   ) 
+
 # Adding time_weeks column and organizing by user_id then date
 ed_logs <- ed_logs %>%
   group_by(user_id) %>%
@@ -110,10 +96,6 @@ ed_logs <- ed_logs %>%
   mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks)) %>%  # Ensure any negative or 0 values are set to 1
   ungroup()   
 
-```
-
-
-```{r}
 # Total number of unique users
 num_users <- n_distinct(ed_logs$user_id)
 # 23305
@@ -149,10 +131,6 @@ no_shows <- ed_logs %>%
 # Proportion
 length(no_shows) / num_users # .005664021
 
-```
-
-
-```{r}
 # Investigating swapping behavior, especially for those swapping to show coins after change
 
 # Getting data needed for sankey plot
@@ -170,36 +148,22 @@ sankey_tibble <- sankey_data %>%
 
 # Make the plot
 sankey_tibble %>%
-ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
   theme_minimal() +
   #scale_fill_manual(values = color_scheme2) +
   geom_flow(color = "darkgray") +
   geom_stratum() +
   theme(legend.position = "top") +
   labs(x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals", legend = "Mode show_coins")
-```
-Between section 30 and 31 is when the change is made. Which happens to also be paired by a major exodus of students from not showing to then showing, meaning that at least to some extent communication of the feature has occurred outside of personal experience.
 
-```{r}
 # Further checking
 stuff <- ed_logs %>%
   select(user_id, show_coins, time_weeks) %>%
   filter(user_id %in% swappers)
 
 sum(stuff$show_coins[stuff$user_id == 1386] == 0)
-```
 
-
-
-```{r}
 sum(ed_logs$session == "learning_goal")
-```
-
-### DESCRIPTIVES
-```{r}
-# Load necessary libraries
-library(tidyverse)
-library(lubridate)
 
 # Check the structure and unique values in domain_id
 str(ed_logs)
@@ -216,241 +180,972 @@ latest_date <- max(ed_logs$date, na.rm = TRUE)
 print(paste("Earliest date:", earliest_date))
 print(paste("Latest date:", latest_date))
 
-# Split the data into before and after October 25, 2024
-split_date <- as.Date("2024-10-25")
-# Filter records after the split date
-ed_logs_after <- ed_logs %>%
-  filter(date > split_date)
+## ----------------------------------------------------------------------------
+## Data Preparation
+data <- ed_logs %>%
+  mutate(grade = as.numeric(as.character(grade))) %>%  # Convert grade from factor to numeric
+  filter(grade >= 3 & grade <= 8)  # Keep only grades between 3 and 8
 
-# Count the occurrences of each value in the late_response column (only for after October 25, 2024)
-# late_response: 1 = late, 0 = on-time
-late_response_counts_after <- ed_logs_after %>%
-  count(late_response) 
+# Define the range
+start_date <- as.Date("2024-09-05")
+end_date <- as.Date("2024-12-14")
 
-# Display late_response counts (after October 25, 2024)
-print(late_response_counts_after) #244202 late
+# Filter the data
+data <- subset(data, date >= start_date & date <= end_date)
 
-# Count unique users that provided late responses (in total)
-unique_late_users_total <- ed_logs %>%
-  filter(late_response == 1) %>%
-  summarize(unique_users = n_distinct(user_id))
-print(paste("Total unique users with late responses:", unique_late_users_total$unique_users)) # 18444
+# Add the 'help' column
+data$help <- ifelse(data$answer == "¿", 1, 0)
 
-# Count unique users that provided late responses per domain
-unique_late_users_by_domain <- ed_logs %>%
-  filter(late_response == 1) %>%
-  group_by(domain_id) %>%
-  summarize(unique_users = n_distinct(user_id)) %>%
-  arrange(desc(unique_users))
+# Add the 'no_answer' column
+data$no_answer <- ifelse(data$answer == "…", 1, 0)
 
-# Display the unique late users per domain
-print(unique_late_users_by_domain) # 8453 for 59  
+data$learning_goal <- ifelse(data$session == "learning_goal", 1, 0)
 
-# Analysis for users who provided late responses
-late_users <- ed_logs %>%
-  filter(late_response == 1)
+# Function to calculate the mode
+calculate_mode <- function(x) {
+  unique_x <- unique(x)
+  unique_x[which.max(tabulate(match(x, unique_x)))]
+}
 
-# Frequency of late responses after October 25, 2024, compared to all responses
-late_response_frequency <- ed_logs_after %>%
-  filter(user_id %in% late_users$user_id) %>%
+# Add a column for mode of difficulty based on user_id
+data <- data %>%
   group_by(user_id) %>%
-  summarize(
-    late_responses_after = sum(late_response),
-    total_responses_after = n(),
-    late_response_rate_after = mean(late_response)
+  mutate(modeDifficulty = calculate_mode(difficulty)) %>%
+  ungroup()
+
+# Define the reference date
+reference_date <- as.Date("2024-10-25")
+
+# Add the 'new_UI' column
+data$new_UI <- ifelse(data$date > reference_date, "After", "Before")
+
+# Map domain IDs to domain names
+domain_names <- c(
+  "1" = "Addition",
+  "2" = "Subtraction",
+  "3" = "Multiplication",
+  "4" = "Division",
+  "5" = "Mix",
+  "7" = "Counting",
+  "9" = "Clock",
+  "10" = "Series",
+  "11" = "Numerals",
+  "59" = "Tables"
+)
+
+data$domain_name <- domain_names[as.character(data$domain_id)]
+
+# Define a consistent theme for all plots
+custom_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
   )
-print("Late response frequency after October 25, 2024:")
-print(late_response_frequency) # difficult to summarize in one sentence but some kids indeed use it often
 
 
-# Percentage of correct answers when responses are late per domain
-# correct_answered: "1" = correct, "0" = incorrect
-correct_answers_late <- late_users %>%
-  group_by(domain_id) %>%
-  summarize(
-    total_late_responses = n(),
-    correct_late_responses = sum(correct_answered == "1"),
-    correct_percentage_late = mean(correct_answered == "1")
-  )
-print("Percentage of correct answers when responses are late per domain:")
-print(correct_answers_late) # almost 60% of late answers in domain 5 and 59 are correct
 
-
-# Calculate the proportion of late responses per domain
-late_response_by_domain <- ed_logs %>%
-  group_by(domain_id) %>%
-  summarize(
-    total_responses = n(),
-    late_responses = sum(late_response),
-    late_response_rate = mean(late_response)
+## ---------------------------------------------------------------------------- No Answer - with Error bars
+plot1 <- data %>%
+  group_by(new_UI, domain_name) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,  # Use sd to calculate standard deviation
+    .groups = 'drop'
   ) %>%
-  arrange(desc(late_response_rate))
+  ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(xmin = no_answer_percentage - sd, xmax = no_answer_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of No Answer by Domain", y = "Domain", x = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
 
-# Display the summary table
-print(late_response_by_domain) # it's not much compared to total answers per domain yet but you can see a trend on which domains are more affected
+plot2 <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(x = factor(grade), y = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of No Answer by Grade", x = "Grade", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
 
-# Visualize late response rates by domain
-late_response_by_domain %>%
-  ggplot(aes(x = fct_reorder(domain_id, late_response_rate), y = late_response_rate)) +
-  geom_col() +
-  coord_flip() +
-  labs(
-    title = "Late Response Rate by Domain",
-    x = "Domain ID",
-    y = "Late Response Rate"
-  ) +
-  theme_minimal()
+plot3 <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    modeDifficultyLabel = case_when(
+      modeDifficulty == "0" ~ "Easy",
+      modeDifficulty == "1" ~ "Medium",
+      modeDifficulty == "2" ~ "Hard"
+    )
+  ) %>%
+  ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of No Answer by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
 
-# Analyze the relationship between difficulty and late responses
-# difficulty: categorical variable indicating task difficulty level
-# late_response: 1 = late, 0 = on-time
-difficulty_analysis <- ed_logs %>%
-  group_by(difficulty) %>%
-  summarize(
-    total_responses = n(),
-    late_responses = sum(late_response),
-    late_response_rate = mean(late_response)
+plot4 <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of No Answer for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
+
+# Combine all plots
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+
+## ---------------------------------------------------------------------------- No Answer - without Error
+plot1 <- data %>%
+  group_by(new_UI, domain_name) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100
+  ) %>%
+  ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of No Answer by Domain", y = "Domain", x = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot2 <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100
+  ) %>%
+  ggplot(aes(x = factor(grade), y = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of No Answer by Grade", x = "Grade", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot3 <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100
+  ) %>%
+  mutate(
+    modeDifficultyLabel = case_when(
+      modeDifficulty == "0" ~ "Easy",
+      modeDifficulty == "1" ~ "Medium",
+      modeDifficulty == "2" ~ "Hard"
+    )
+  ) %>%
+  ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of No Answer by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot4 <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    no_answer_percentage = mean(no_answer) * 100
+  ) %>%
+  ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = no_answer_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of No Answer for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  custom_theme
+
+# Combine all plots
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+
+## ----------------------------------------------------------------------------- Statistical tests
+group_summary <- data %>%
+  group_by(new_UI) %>%
+  summarise(
+    mean_no_answer = mean(no_answer, na.rm = TRUE),
+    sd_no_answer = sd(no_answer, na.rm = TRUE),
+    n = n()
+  )
+# Prepare the data
+test_data <- data %>%
+  group_by(new_UI, user_id) %>%  # Assuming individual-level responses
+  summarise(
+    no_answer_mean = mean(no_answer, na.rm = TRUE)  # Mean no_answer per student
+  ) %>%
+  ungroup()
+
+# Perform an independent t-test
+t_test_result <- t.test(
+  no_answer_mean ~ new_UI,  # Compare "Before" vs "After"
+  data = test_data,
+  var.equal = FALSE  # Use Welch's t-test (default), which is robust to unequal variances
+)
+
+# Output the results
+cat("T-Test Results:\n")
+print(t_test_result)
+
+# Define a function to perform t-tests within subgroups
+perform_subgroup_t_test <- function(data, subgroup_var) {
+  data %>%
+    group_by(!!sym(subgroup_var)) %>%  # Group by the subgroup variable
+    summarise(
+      t_test_result = list(t.test(no_answer ~ new_UI, data = cur_data(), var.equal = FALSE)),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      subgroup = !!sym(subgroup_var),
+      t_statistic = map_dbl(t_test_result, ~ .x$statistic),
+      p_value = map_dbl(t_test_result, ~ .x$p.value),
+      mean_diff = map_dbl(t_test_result, ~ diff(.x$estimate)),
+      conf_low = map_dbl(t_test_result, ~ .x$conf.int[1]),
+      conf_high = map_dbl(t_test_result, ~ .x$conf.int[2])
+    ) %>%
+    select(subgroup, t_statistic, p_value, mean_diff, conf_low, conf_high)
+}
+
+# Apply the function for each subgroup variable
+results_by_domain <- perform_subgroup_t_test(data, "domain_id")
+results_by_grade <- perform_subgroup_t_test(data, "grade")
+results_by_difficulty <- perform_subgroup_t_test(data, "modeDifficulty")
+results_by_learning_goal <- perform_subgroup_t_test(data, "learning_goal")
+
+# Display results
+results_by_domain
+results_by_grade
+results_by_difficulty
+results_by_learning_goal
+
+
+# ---------------------------------------------------------------------------- Help - with Error Bars
+plot1 <- data %>%
+  group_by(new_UI, domain_name) %>%
+  summarise(
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,  # Use sd to calculate standard deviation
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(xmin = help_percentage - sd, xmax = help_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of Help by Domain", y = "Domain", x = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot2 <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(x = factor(grade), y = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of Help by Grade", x = "Grade", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot3 <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    modeDifficultyLabel = case_when(
+      modeDifficulty == "0" ~ "Easy",
+      modeDifficulty == "1" ~ "Medium",
+      modeDifficulty == "2" ~ "Hard"
+    )
+  ) %>%
+  ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of Help by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot4 <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,
+    .groups = 'drop'
+  ) %>%
+  ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
+                width = 0.2, position = position_dodge(0.9)) +
+  labs(title = "Percentage of Help for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+# Combine all plots
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+
+# ---------------------------------------------------------------------------- Help - without Error Bars
+plot1 <- data %>%
+  group_by(new_UI, domain_name) %>%
+  summarise(
+    help_percentage = mean(help) * 100
+  ) %>%
+  ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Help by Domain", y = "Domain", x = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot2 <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    help_percentage = mean(help) * 100
+  ) %>%
+  ggplot(aes(x = factor(grade), y = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Help by Grade", x = "Grade", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot3 <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    help_percentage = mean(help) * 100
+  ) %>%
+  mutate(
+    modeDifficultyLabel = case_when(
+      modeDifficulty == "0" ~ "Easy",
+      modeDifficulty == "1" ~ "Medium",
+      modeDifficulty == "2" ~ "Hard"
+    )
+  ) %>%
+  ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Help by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+plot4 <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    help_percentage = mean(help) * 100
+  ) %>%
+  ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = help_percentage, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Percentage of Help for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  custom_theme
+
+# Combine all plots
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+
+##------------------------------------------------------------------------------ Statistical analysis
+
+# Summarize the data: Calculate the mean and standard deviation of "help" usage before and after the new UI
+help_summary <- data %>%
+  group_by(new_UI) %>%
+  summarise(
+    mean_help = mean(help, na.rm = TRUE),  # Average "help" usage
+    sd_help = sd(help, na.rm = TRUE),      # Standard deviation of "help" usage
+    n = n()                                # Sample size
   )
 
-# Display the summary table
-print(difficulty_analysis)
+# Perform an independent t-test to test for differences in "help" usage
+t_test_help <- t.test(
+  help ~ new_UI,  # Test if "help" differs between "Before" and "After"
+  data = data,
+  var.equal = FALSE  # Use Welch's t-test by default
+)
 
-# Visualize late response rates by difficulty
-difficulty_analysis %>%
-  ggplot(aes(x = difficulty, y = late_response_rate)) +
-  geom_col(fill = "steelblue") +
-  labs(
-    title = "Late Response Rate by Difficulty Level",
-    x = "Difficulty Level",
-    y = "Late Response Rate"
-  ) +
-  theme_minimal()
+# Output results
+cat("Summary of Help Usage by New UI:\n")
+print(help_summary)
+cat("\nT-Test Results:\n")
+print(t_test_help)
 
-# Explore the trend of late responses over time (weekly)
-late_response_time_trend <- ed_logs %>%
-  mutate(week = lubridate::floor_date(date, "week")) %>%
-  group_by(week) %>%
-  summarize(
+
+# Define a function to perform t-tests for subgroups
+perform_subgroup_t_test <- function(data, subgroup_var) {
+  data %>%
+    group_by(!!sym(subgroup_var)) %>%  # Group by the subgroup variable
+    summarise(
+      t_test_result = list(t.test(help ~ new_UI, data = cur_data(), var.equal = FALSE)),  # Perform t-test
+      .groups = "drop"
+    ) %>%
+    mutate(
+      subgroup = !!sym(subgroup_var),
+      t_statistic = map_dbl(t_test_result, ~ .x$statistic),
+      p_value = map_dbl(t_test_result, ~ .x$p.value),
+      mean_diff = map_dbl(t_test_result, ~ diff(.x$estimate)),
+      conf_low = map_dbl(t_test_result, ~ .x$conf.int[1]),
+      conf_high = map_dbl(t_test_result, ~ .x$conf.int[2])
+    ) %>%
+    select(subgroup, t_statistic, p_value, mean_diff, conf_low, conf_high)
+}
+
+# Apply the function for each subgroup variable
+results_by_domain <- perform_subgroup_t_test(data, "domain_id")
+results_by_grade <- perform_subgroup_t_test(data, "grade")
+results_by_difficulty <- perform_subgroup_t_test(data, "modeDifficulty")
+results_by_learning_goal <- perform_subgroup_t_test(data, "learning_goal")
+
+# Display results
+results_by_domain
+results_by_grade
+results_by_difficulty
+results_by_learning_goal
+
+
+# ---------------------------------------------------------------------------- Percentage correct without
+
+# Add "Before" and "After" labels to the new_UI column
+data$new_UI <- ifelse(data$date > reference_date, "After", "Before")
+
+# Calculate correct answers percentage by domain with UI status
+correct_answers_domain <- data %>%
+  group_by(new_UI, domain_id) %>%
+  summarise(
     total_responses = n(),
-    late_responses = sum(late_response),
-    late_response_rate = mean(late_response)
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After")  # Label as "Old" or "New"
   )
 
-# Visualize the trend
-late_response_time_trend %>%
-  ggplot(aes(x = week, y = late_response_rate)) +
-  geom_line(color = "blue") +
-  labs(
-    title = "Trend of Late Responses Over Time",
-    x = "Week",
-    y = "Late Response Rate"
-  ) +
-  theme_minimal()
+correct_answers_domain$domain_name <- domain_names[as.character(correct_answers_domain$domain_id)]
 
-# Temporal Patterns
-# Late Response by Hour of Day
-# hour: extracted from the timestamp to analyze time-based patterns
-late_response_by_hour <- ed_logs %>%
-  mutate(hour = hour(date)) %>%
+plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(
+    title = "Percentage of Correct Answers by Domain",
+    x = "Percentage of Correct Answers",
+    y = "Domain",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# Calculate correct answers percentage by grade
+correct_answers_grade <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After")
+  )
+
+plot2 <- ggplot(correct_answers_grade, aes(x = grade, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(
+    title = "Percentage of Correct Answers by Grade",
+    x = "Grade",
+    y = "Percentage of Correct Answers",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# Calculate correct answers percentage by difficulty level
+correct_answers_difficulty <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
+    Difficulty = case_when(
+      modeDifficulty == "0" ~ "Easy",
+      modeDifficulty == "1" ~ "Medium",
+      modeDifficulty == "2" ~ "Hard"
+    )
+  )
+
+plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(
+    title = "Percentage of Correct Answers by Difficulty",
+    x = "Difficulty",
+    y = "Percentage of Correct Answers",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# Calculate correct answers percentage by learning goal
+correct_answers_learning <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
+    LearningGoal = ifelse(learning_goal == 1, "Yes", "No")
+  )
+
+plot4 <- ggplot(correct_answers_learning, aes(x = Learning_Goal, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  labs(
+    title = "Percentage of Correct Answers by Learning Goal",
+    x = "Learning Goal",
+    y = "Percentage of Correct Answers",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# Combine all plots using gridExtra
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+
+
+# ---------------------------------------------------------------------------- Percentage correct without
+
+# Calculate correct answers percentage by domain with UI status and SD
+correct_answers_domain <- data %>%
+  group_by(new_UI, domain_id) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
+    domain_name = domain_names[as.character(domain_id)]
+  )
+
+plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(
+    xmin = correct_percentage - correct_sd,
+    xmax = correct_percentage + correct_sd
+  ),
+  position = position_dodge(width = 0.8),
+  width = 0.2
+  ) +
+  labs(
+    title = "Percentage of Correct Answers by Domain",
+    x = "Percentage of Correct Answers",
+    y = "Domain",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# ----------------------------------------------------------------------------
+# Calculate correct answers percentage by grade with SD
+correct_answers_grade <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+  ) %>%
+  ungroup() %>%
+  mutate(UI_Status = ifelse(new_UI == "Before", "Before", "After"))
+
+plot2 <- ggplot(correct_answers_grade, aes(x = grade, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(
+    ymin = correct_percentage - correct_sd,
+    ymax = correct_percentage + correct_sd
+  ),
+  position = position_dodge(width = 0.8),
+  width = 0.2
+  ) +
+  labs(
+    title = "Percentage of Correct Answers by Grade",
+    x = "Grade",
+    y = "Percentage of Correct Answers",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# ----------------------------------------------------------------------------
+# Calculate correct answers percentage by difficulty with SD
+correct_answers_difficulty <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
+    Difficulty = case_when(
+      modeDifficulty == "0" ~ "Easy",
+      modeDifficulty == "1" ~ "Medium",
+      modeDifficulty == "2" ~ "Hard"
+    )
+  )
+
+plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(
+    ymin = correct_percentage - correct_sd,
+    ymax = correct_percentage + correct_sd
+  ),
+  position = position_dodge(width = 0.8),
+  width = 0.2
+  ) +
+  labs(
+    title = "Percentage of Correct Answers by Difficulty",
+    x = "Difficulty",
+    y = "Percentage of Correct Answers",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# ----------------------------------------------------------------------------
+# Calculate correct answers percentage by learning goal with SD
+correct_answers_learning <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+  ) %>%
+  ungroup() %>%
+  mutate(
+    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
+    LearningGoal = ifelse(learning_goal == 1, "Yes", "No")
+  )
+
+plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(
+    ymin = correct_percentage - correct_sd,
+    ymax = correct_percentage + correct_sd
+  ),
+  position = position_dodge(width = 0.8),
+  width = 0.2
+  ) +
+  labs(
+    title = "Percentage of Correct Answers by Learning Goal",
+    x = "Learning Goal",
+    y = "Percentage of Correct Answers",
+    fill = "Update on Oct 25th"
+  ) +
+  theme_minimal() +
+  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+# ----------------------------------------------------------------------------
+# Combine all plots using gridExtra
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+
+# ---------------------------------------------------------------------------- Testing significance 
+
+# Convert `correct_answered` to numeric
+data$correct_answered <- as.numeric(as.character(data$correct_answered))
+
+# Overall t-test for correct answers (Before vs After)
+overall_t_test <- t.test(correct_answered ~ new_UI, data = data, var.equal = FALSE)
+
+# Summarize overall mean and SD by new_UI
+overall_summary <- data %>%
+  group_by(new_UI) %>%
+  summarise(
+    mean_correct = mean(correct_answered, na.rm = TRUE) * 100,  # Mean in percentage
+    sd_correct = sd(correct_answered, na.rm = TRUE) * 100,      # Standard deviation in percentage
+    n = n()                                                    # Sample size
+  )
+
+# Print overall results
+cat("Overall Summary:\n")
+print(overall_summary)
+cat("\nOverall T-Test Results:\n")
+print(overall_t_test)
+
+# Define a function to test for significance by subgroup
+perform_significance_test <- function(data, group_var) {
+  data %>%
+    group_by(!!sym(group_var)) %>%  # Group by the specified variable
+    summarise(
+      t_test_result = list(t.test(correct_answered ~ new_UI, data = cur_data(), var.equal = FALSE)),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      subgroup = !!sym(group_var),
+      t_statistic = map_dbl(t_test_result, ~ .x$statistic),
+      p_value = map_dbl(t_test_result, ~ .x$p.value),
+      mean_diff = map_dbl(t_test_result, ~ diff(.x$estimate) * 100),  # Mean difference in percentage
+      conf_low = map_dbl(t_test_result, ~ .x$conf.int[1] * 100),
+      conf_high = map_dbl(t_test_result, ~ .x$conf.int[2] * 100)
+    ) %>%
+    select(subgroup, t_statistic, p_value, mean_diff, conf_low, conf_high)
+}
+
+# Test significance for each subgroup
+results_by_domain <- perform_significance_test(data, "domain_id")
+results_by_grade <- perform_significance_test(data, "grade")
+results_by_difficulty <- perform_significance_test(data, "modeDifficulty")
+results_by_learning_goal <- perform_significance_test(data, "learning_goal")
+
+# Print subgroup results
+cat("\nSignificance by Domain:\n")
+print(results_by_domain)
+cat("\nSignificance by Grade:\n")
+print(results_by_grade)
+cat("\nSignificance by Difficulty:\n")
+print(results_by_difficulty)
+cat("\nSignificance by Learning Goal:\n")
+print(results_by_learning_goal)
+
+## ----------------------------------------------------------------------------- basic overview :
+
+# Total items answered
+items_answered <- data %>%
+  group_by(new_UI) %>%
+  summarise(
+    total_items = n(),
+    .groups = "drop"
+  )
+t_test_items <- t.test(item_id ~ new_UI, data = data)
+
+# Average response time and significance test
+response_time <- data %>%
+  group_by(new_UI) %>%
+  summarise(
+    avg_response_time = mean(response_in_seconds, na.rm = TRUE),
+    sd_response_time = sd(response_in_seconds, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+t_test_response_time <- t.test(response_in_seconds ~ new_UI, data = data)
+
+# Average daily unique users and significance test
+t_test_daily_users <- t.test(
+  daily_users ~ new_UI,
+  data = data %>%
+    group_by(new_UI, date) %>%
+    summarise(daily_users = n_distinct(user_id), .groups = "drop")
+)
+
+# Average daily sessions per user and significance test
+daily_sessions_per_user <- data %>%
+  group_by(new_UI, date) %>%
+  summarise(
+    total_sessions = n(),
+    unique_users = n_distinct(user_id),
+    avg_sessions_per_user = total_sessions / unique_users,
+    .groups = "drop"
+  ) %>%
+  group_by(new_UI) %>%
+  summarise(
+    avg_sessions_per_user = mean(avg_sessions_per_user, na.rm = TRUE),
+    sd_sessions_per_user = sd(avg_sessions_per_user, na.rm = TRUE),
+    n_days = n(),  # Number of days
+    .groups = "drop"
+  )
+t_test_sessions_per_user <- t.test(
+  avg_sessions_per_user ~ new_UI,
+  data = data %>%
+    group_by(new_UI, date) %>%
+    summarise(
+      total_sessions = n(),
+      unique_users = n_distinct(user_id),
+      avg_sessions_per_user = total_sessions / unique_users,
+      .groups = "drop"
+    )
+)
+
+# Combine results
+descriptives <- items_answered %>%
+  left_join(response_time, by = "new_UI") %>%
+  left_join(daily_unique_users, by = "new_UI") %>%
+  left_join(daily_sessions_per_user, by = "new_UI")
+
+# Print the final descriptive statistics
+print(descriptives)
+
+# Print t-test results
+cat("\nT-Test Results:\n")
+cat("\nResponse Time:\n")
+print(t_test_response_time)
+cat("\nDaily Unique Users:\n")
+print(t_test_daily_users)
+cat("\nDaily Sessions Per User:\n")
+print(t_test_sessions_per_user)
+
+##------------------------------------------------------------------------------ Temporal pattern
+
+
+# Ensure `date` is in POSIXct format
+data$date <- as.POSIXct(data$date)
+
+# Add `hour` column to the data
+data <- data %>%
+  mutate(hour = hour(date))  # Extract hour from the date column
+
+# Filter data for "After" the new UI and exclude rows where no_answer = 1 and late_response = 1
+filtered_data <- data %>%
+  filter(new_UI == "After" & !(late_response == 1 & no_answer == 1))
+
+# Late Responses by Hour of the Day
+late_response_by_hour <- filtered_data %>%
   group_by(hour) %>%
   summarize(
     total_responses = n(),
     late_responses = sum(late_response),
-    late_response_rate = mean(late_response)
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups = "drop"
   )
-print("Late Response Rate by Hour of Day:")
-print(late_response_by_hour)
 
-late_response_by_hour %>%
+# Plot Late Response Rate by Hour
+plot_hour <- late_response_by_hour %>%
   ggplot(aes(x = hour, y = late_response_rate)) +
-  geom_line() +
+  geom_line(color = "#57b0b5", size = 1.2) +
+  geom_point(color = "#57b0b5", size = 3) +
   labs(
     title = "Late Response Rate by Hour of Day",
     x = "Hour of Day",
-    y = "Late Response Rate"
+    y = "Late Response Rate (%)"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "gray", linetype = "dotted"),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14, face = "bold"),
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold")
+  )
 
-# Late Response by Day of the Week
-# weekday: extracted as a categorical label for days of the week
-late_response_by_day <- ed_logs %>%
+# Display the plot
+print(plot_hour)
+
+
+# 2. Late Responses by Weekday
+late_response_by_weekday <- filtered_data %>%
   mutate(weekday = wday(date, label = TRUE)) %>%
   group_by(weekday) %>%
   summarize(
     total_responses = n(),
     late_responses = sum(late_response),
-    late_response_rate = mean(late_response)
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups = "drop"
   )
-print("Late Response Rate by Day of the Week:")
-print(late_response_by_day)
 
-late_response_by_day %>%
-  ggplot(aes(x = weekday, y = late_response_rate)) +
-  geom_col(fill = "skyblue") +
+plot_weekday <- ggplot(late_response_by_weekday, aes(x = weekday, y = late_response_rate)) +
+  geom_bar(stat = "identity", fill = "#fe6c66") +
   labs(
-    title = "Late Response Rate by Day of the Week",
-    x = "Day of the Week",
-    y = "Late Response Rate"
+    title = "Late Responses by Weekday (After New UI)",
+    x = "Weekday",
+    y = "Late Response Rate (%)"
   ) +
   theme_minimal()
 
-# Behavioral Patterns: Consecutive Late Responses
-# streak: counts consecutive late responses for each user
-consecutive_late_responses <- ed_logs %>%
-  arrange(user_id, date) %>%
-  group_by(user_id) %>%
-  mutate(streak = cumsum(c(0, diff(late_response)) > 0)) %>%
-  filter(late_response == 1) %>%
-  summarize(max_streak = max(streak))
-print("Max Consecutive Late Responses by User:")
-print(consecutive_late_responses)
-
-# Impact of Late Responses: Time Spent
-# Analyze average and total time spent based on response timeliness
-impact_time_spent <- ed_logs %>%
-  group_by(late_response) %>%
-  summarize(
-    avg_time_spent = mean(response_in_seconds, na.rm = TRUE),
-    total_time_spent = sum(response_in_seconds, na.rm = TRUE)
-  )
-print("Average and Total Time Spent by Late Response:")
-print(impact_time_spent)
-
-# Engagement Over Time
-# session_week: groups responses by week for trend analysis
-engagement_trend <- ed_logs %>%
-  mutate(session_week = floor_date(date, "week")) %>%
-  group_by(session_week, late_response) %>%
-  summarize(total_responses = n()) %>%
-  spread(late_response, total_responses, fill = 0)
-print("Engagement Trend Over Time by Late Response:")
-print(engagement_trend)
-
-# Domain-Specific Analysis with Difficulty Interaction
-# Analyze interaction between domain_id and difficulty for late responses
-late_response_by_domain_difficulty <- ed_logs %>%
-  group_by(domain_id, difficulty) %>%
+# 3. Late Responses by Week Since New UI
+late_response_by_week <- filtered_data %>%
+  mutate(week_since_ui = floor(as.numeric(difftime(date, min(date), units = "weeks")))) %>%
+  group_by(week_since_ui) %>%
   summarize(
     total_responses = n(),
     late_responses = sum(late_response),
-    late_response_rate = mean(late_response)
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups = "drop"
   )
-print("Late Response Rate by Domain and Difficulty:")
-print(late_response_by_domain_difficulty)
 
-late_response_by_domain_difficulty %>%
-  ggplot(aes(x = difficulty, y = late_response_rate, fill = domain_id)) +
-  geom_bar(stat = "identity", position = "dodge") +
+plot_week <- ggplot(late_response_by_week, aes(x = week_since_ui, y = late_response_rate)) +
+  geom_line(color = "#57b0b5", size = 1) +
+  geom_point(color = "#57b0b5", size = 2) +
   labs(
-    title = "Late Response Rate by Domain and Difficulty",
-    x = "Difficulty",
-    y = "Late Response Rate"
+    title = "Late Responses by Week Since New UI",
+    x = "Week Since New UI",
+    y = "Late Response Rate (%)"
   ) +
   theme_minimal()
 
-```
+# 4. Late Responses by Days Since New UI
+late_response_by_day <- filtered_data %>%
+  mutate(days_since_ui = as.numeric(difftime(date, min(date), units = "days"))) %>%
+  group_by(days_since_ui) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups = "drop"
+  )
 
+plot_day <- ggplot(late_response_by_day, aes(x = days_since_ui, y = late_response_rate)) +
+  geom_line(color = "#fe6c66", size = 1) +
+  geom_point(color = "#fe6c66", size = 2) +
+  labs(
+    title = "Late Responses by Days Since New UI",
+    x = "Days Since New UI",
+    y = "Late Response Rate (%)"
+  ) +
+  theme_minimal()
 
-```{r}
+# Combine all plots into a grid
+grid.arrange(plot_hour, plot_weekday, plot_week, plot_day, ncol = 2)
+
 oefenwebDatabase::close_connection(con)
-```
