@@ -1071,20 +1071,88 @@ plot_hour <- late_response_by_hour %>%
   ) +
   theme_minimal() +
   theme(
-    panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank(),
-    panel.grid.major.y = element_line(color = "gray", linetype = "dotted"),
-    axis.text = element_text(size = 12),
-    axis.title = element_text(size = 14, face = "bold"),
-    plot.title = element_text(size = 16, hjust = 0.5, face = "bold")
+    plot.title = element_text(hjust = 0.5, face = "bold")
   )
 
-# Display the plot
-print(plot_hour)
+# Late Responses by Weekday
+plot_weekday <- ggplot(late_response_by_weekday, aes(x = weekday, y = late_response_rate)) +
+  geom_bar(stat = "identity", fill = "#fe6c66") +
+  labs(
+    title = "Late Responses by Weekday",
+    x = "Weekday",
+    y = "Late Response Rate (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+# Late Responses by Week Since New UI
+plot_week <- ggplot(late_response_by_week, aes(x = week_since_ui, y = late_response_rate)) +
+  geom_line(color = "#57b0b5", size = 1) +
+  geom_point(color = "#57b0b5", size = 2) +
+  labs(
+    title = "Late Responses by Week",
+    x = "Week Since New UI",
+    y = "Late Response Rate (%)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+# Combine all plots into a grid
+grid.arrange(plot_hour, plot_weekday, plot_week, ncol = 3)
 
 
-# 2. Late Responses by Weekday
-late_response_by_weekday <- filtered_data %>%
+##------------------------------------------------------------------------------ 
+# ANOVA for Late Response Rate by Hour
+anova_hour <- aov(late_response ~ as.factor(hour), data = filtered_data)
+cat("ANOVA for Late Response Rate by Hour:\n")
+summary(anova_hour)
+
+# ANOVA for Late Response Rate by Weekday
+anova_weekday <- aov(late_response ~ as.factor(wday(date)), data = filtered_data)
+cat("\nANOVA for Late Response Rate by Weekday:\n")
+summary(anova_weekday)
+
+# Create the week_since_ui variable
+filtered_data <- filtered_data %>%
+  mutate(week_since_ui = floor(as.numeric(difftime(date, min(date), units = "weeks"))))
+
+
+# ANOVA for Late Response Rate by Week Since New UI
+anova_week <- aov(late_response ~ as.factor(week_since_ui), data = filtered_data)
+cat("\nANOVA for Late Response Rate by Week Since New UI:\n")
+summary(anova_week)
+
+# Post-hoc Analysis for Late Response Rate by Hour
+tukey_hour <- TukeyHSD(anova_hour)
+cat("Post-hoc Analysis for Late Response Rate by Hour:\n")
+print(tukey_hour)
+
+# Post-hoc Analysis for Late Response Rate by Weekday
+tukey_weekday <- TukeyHSD(anova_weekday)
+cat("\nPost-hoc Analysis for Late Response Rate by Weekday:\n")
+print(tukey_weekday)
+
+# Post-hoc Analysis for Late Response Rate by Week Since New UI
+tukey_week <- TukeyHSD(anova_week)
+cat("\nPost-hoc Analysis for Late Response Rate by Week Since New UI:\n")
+print(tukey_week)
+
+# Calculate total responses and late responses by hour
+responses_by_hour <- filtered_data %>%
+  group_by(hour) %>%
+  summarize(
+    total_responses = n(),
+    late_responses = sum(late_response),
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups = "drop"
+  )
+
+# Calculate total responses and late responses by weekday
+responses_by_weekday <- filtered_data %>%
   mutate(weekday = wday(date, label = TRUE)) %>%
   group_by(weekday) %>%
   summarize(
@@ -1093,59 +1161,5 @@ late_response_by_weekday <- filtered_data %>%
     late_response_rate = round(mean(late_response) * 100, 2),
     .groups = "drop"
   )
-
-plot_weekday <- ggplot(late_response_by_weekday, aes(x = weekday, y = late_response_rate)) +
-  geom_bar(stat = "identity", fill = "#fe6c66") +
-  labs(
-    title = "Late Responses by Weekday (After New UI)",
-    x = "Weekday",
-    y = "Late Response Rate (%)"
-  ) +
-  theme_minimal()
-
-# 3. Late Responses by Week Since New UI
-late_response_by_week <- filtered_data %>%
-  mutate(week_since_ui = floor(as.numeric(difftime(date, min(date), units = "weeks")))) %>%
-  group_by(week_since_ui) %>%
-  summarize(
-    total_responses = n(),
-    late_responses = sum(late_response),
-    late_response_rate = round(mean(late_response) * 100, 2),
-    .groups = "drop"
-  )
-
-plot_week <- ggplot(late_response_by_week, aes(x = week_since_ui, y = late_response_rate)) +
-  geom_line(color = "#57b0b5", size = 1) +
-  geom_point(color = "#57b0b5", size = 2) +
-  labs(
-    title = "Late Responses by Week Since New UI",
-    x = "Week Since New UI",
-    y = "Late Response Rate (%)"
-  ) +
-  theme_minimal()
-
-# 4. Late Responses by Days Since New UI
-late_response_by_day <- filtered_data %>%
-  mutate(days_since_ui = as.numeric(difftime(date, min(date), units = "days"))) %>%
-  group_by(days_since_ui) %>%
-  summarize(
-    total_responses = n(),
-    late_responses = sum(late_response),
-    late_response_rate = round(mean(late_response) * 100, 2),
-    .groups = "drop"
-  )
-
-plot_day <- ggplot(late_response_by_day, aes(x = days_since_ui, y = late_response_rate)) +
-  geom_line(color = "#fe6c66", size = 1) +
-  geom_point(color = "#fe6c66", size = 2) +
-  labs(
-    title = "Late Responses by Days Since New UI",
-    x = "Days Since New UI",
-    y = "Late Response Rate (%)"
-  ) +
-  theme_minimal()
-
-# Combine all plots into a grid
-grid.arrange(plot_hour, plot_weekday, plot_week, plot_day, ncol = 2)
 
 oefenwebDatabase::close_connection(con)
