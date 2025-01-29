@@ -25,6 +25,7 @@ library(lmerTest)
 library(lubridate)
 library(DBI)
 library(ggalluvial)
+library(survival)
 # Establishing connection with oefenweb
 con <- oefenwebDatabase::connect()
 ```
@@ -37,6 +38,14 @@ ed_logs <- list()
 domains <- c(1:5, 7, 9, 10, 11, 59)
 change_date <- as.Date("2024-10-25")
 start_date <- as.Date("2023-09-01")
+custom_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10),
+    plot.subtitle = element_text(hjust = 0.5, face = "bold", size = 10)
+  )
 
 # Loop through each E_D table
 for (i in 1:10) {
@@ -187,26 +196,33 @@ Zooming into this year and changing to weekly.
 ```{r}
 # Getting data needed for sankey plot
 sankey_data <- ed_logs %>%
-  select(user_id, show_coins, time_weeks) %>%
+  select(user_id, show_coins, time_weeks, date) %>%
   filter(user_id %in% swappers,
          time_weeks > 52) %>%
-  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE)) %>%
+  group_by(interval) %>%
+  mutate(start_date = as.character(min(as.Date(date)))) %>%  # Assign the earliest date in the interval
+  ungroup()
 
 
 # Group by individual and interval, then summarize
 sankey_tibble <- sankey_data %>%
-  group_by(user_id, interval) %>%
+  group_by(user_id, interval, start_date) %>%
   summarize(mode_show_coins = names(which.max(table(show_coins)))) %>%
   ungroup()
 
 # Make the plot
-sankey_tibble %>%
-ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+coins_sankey <- sankey_tibble %>%
+ggplot(aes(x = start_date, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
   theme_minimal() +
   geom_flow(color = "darkgray") +
   geom_stratum() +
-  theme(legend.position = "top") +
-  labs(x = "Weekly Intervals", y = "Users", title = "Mode show_coins across weekly Intervals", legend = "Mode show_coins")
+  custom_theme +
+  labs(x = "Interval Start Date", y = "Users", title = "Most Often Coin Showing Choice in 2-week Intervals", legend = "Mode show_coins")
+
+coins_sankey
+ggsave("Jan Group/Plots/Show_coins_Sankey.jpeg")
+
 ```
 
 
@@ -259,7 +275,7 @@ show_count <- stuff %>%
   summarize(count = n(), .groups = "drop") 
 
 # Line chart ordered by proportion of showing coins
-show_count %>%
+coins_plot <- show_count %>%
   group_by(user_id) %>%
   mutate(total = sum(count),                         
     prop = sum(count[show_coins == 1]) / total 
@@ -273,8 +289,12 @@ ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coin
                      labels = c("Not Showing", "Showing"),
                      name = "Coins") +
   labs(title = "User Coin Showing Behavior", subtitle = "Ordered by Proportion of Coins Showing & Total Played", x = "Users", y = "Count") +
-  theme_minimal() +
-  theme(axis.text.x = element_blank()) 
+  custom_theme +
+  theme(axis.text.x = element_blank())
+
+coins_plot
+ggsave("Jan Group/Plots/Coin Showing.jpeg")
+
 
 ```
 
@@ -285,9 +305,12 @@ We see that the majority of those who switched coins on, most of the time kept c
 # Change in difficulty selection data
 # Getting data needed for sankey plot
 sankey_data <- ed_logs %>%
-  select(user_id, difficulty, time_weeks) %>%
+  select(user_id, difficulty, time_weeks, date) %>%
   filter(time_weeks > 52) %>%
-  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE)) %>%
+  group_by(interval) %>%
+  mutate(start_date = min(as.Date(date))) %>%  # Assign the earliest date in the interval
+  ungroup()
 
 sankey_data <- sankey_data %>%
   mutate(difficulty = factor(
@@ -297,9 +320,11 @@ sankey_data <- sankey_data %>%
 
 # Group by individual and interval, then summarize
 sankey_tibble <- sankey_data %>%
-  group_by(user_id, interval) %>%
-  summarize(mode_difficulty = names(which.max(table(difficulty)))) %>%
-  ungroup()
+  group_by(user_id, interval, start_date) %>%
+  summarize(Mode_difficulty = names(which.max(table(difficulty)))) %>%
+  ungroup() %>%
+  mutate(start_date = as.character(start_date))
+  
 
 color_scheme2 <- c(
   "Easy" = "#008856",
@@ -313,18 +338,21 @@ color_scheme2 <- c(
 ```{r}
 # Change in difficulty selection plot
 # Make the sankey plot
-sankey_tibble %>%
-ggplot(aes(x = interval, stratum = mode_difficulty, alluvium = user_id, fill = mode_difficulty, label = mode_difficulty)) +
-  theme_minimal() +
+dif_sankey <- sankey_tibble %>%
+ggplot(aes(x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill = Mode_difficulty, label = Mode_difficulty)) +
   scale_fill_manual(values = color_scheme2) +
   geom_flow(color = "darkgray") +
   geom_stratum() +
-  theme(legend.position = "top", 
-        axis.text.x = element_blank()) +
-  labs(x = "2-Week Intervals", y = "Users", title = "Mode Difficulty across 2-Week Intervals", legend = "Mode Difficulty")
+  custom_theme +
+  labs(x = "Interval Start Date", y = "Users", title = "Most Often Difficulty Chosen across 2-Week Intervals", legend = "Mode Difficulty")
+
+dif_sankey
+ggsave("Jan Group/Plots/Mode Difficulty Sankey.jpeg")
+
 ```
 
-A large initial migration to medium difficulty right after the change. A surprising amount from hard, and an understandable amount from easy. Curiously, after the initial migration there is a consistent move back to hard difficulty for some. The amount of students in easy is noticeably lower after the change. 
+
+A large initial migration to medium difficulty on the day of the change. A surprising amount from hard, and an understandable amount from easy. Curiously, after the initial migration there is a consistent move back to hard difficulty for some. The amount of students in easy is noticeably lower after the change. 
 Do these students who have left easy use the extended deadline?
 
 ```{r}
@@ -344,37 +372,6 @@ ed_diff_tibble <- ed_diff_data %>%
             non_response_total = sum(answer == "…")) %>%
   ungroup()
 
-```
-
-```{r}
-# # Interaction of leaving easy and extended deadline
-# braves <- ed_diff_tibble %>%
-#   group_by(user_id) %>%
-#   mutate(first_cat = first(mode_difficulty), 
-#          switched = mode_difficulty != first_cat & interval > 1) %>%
-#   filter(first_cat == "Easy" & any(switched))
-# 
-# # Grouping those who stayed off easy, vs those who didn't
-# switch_tracking <- braves %>%
-#   group_by(user_id) %>%
-#   mutate(first_switch_week = if_else(switched, interval, NA_integer_), # Week of first switch
-#     first_switch_week = min(first_switch_week, na.rm = TRUE), # Get the earliest switch
-#     stay_switched = if_else(                           # Check if they stay switched
-#       interval >= first_switch_week & switched, 
-#       mode_difficulty, 
-#       NA_character_
-#     )
-#   ) 
-# # Sum of late response and stay switch labeled
-# stayers <- switch_tracking %>%
-#   summarise(stayed_switched = if_else(
-#             all(na.omit(stay_switched) == first(na.omit(stay_switched))), 
-#             "Stayed Switched", 
-#             "Did Not Stay Switched"),
-#             extended_deadline_total = sum(extended_deadline_total),
-#             non_response_total = sum(non_response_total)
-#   ) %>%
-#   ungroup()
 ```
 
 
@@ -477,7 +474,7 @@ response_color <- c(
 )
 
 # Faceted bar graph
-ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) +
+fb_plot <- ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = response_color) +
   labs(
@@ -486,17 +483,19 @@ ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) 
     y = "Total Responses",
     fill = "Response Type"
   ) +
-  theme_minimal() +
+  custom_theme +
   facet_wrap(~ stayed_switched) +
   theme(
     strip.text = element_text(size = 12),
     legend.position = "bottom",
     axis.title.x = element_blank(),
     axis.text.x = element_blank()
-  )
+  ) 
+
+fb_plot
+ggsave("Jan Group/Plots/Response totals by Difficulty.jpeg")
 
 ```
-
 
 
 ### Motivation
@@ -507,7 +506,7 @@ how many rage quits after non-answer before vs how many rq after late response a
 # Of note, domain 5 is the only to not have 10/session but 15
 # Data for motivation analysis: soft-quit, hard-quit, sessions per instance
 motivation_data <- ed_logs %>%
-  select(user_id, answer, date, new_user_domain_session_count, correct_answered, grade, domain_id, deadline, late_response, session) %>%
+  select(user_id, answer, date, new_user_domain_session_count, correct_answered, grade, domain_id, deadline, late_response, session, response_in_seconds) %>%
   rename(session_number = new_user_domain_session_count) %>%
   # Getting users who have before and after data and just this school year
   mutate(change = if_else(date < change_date, "Before", "After")) %>%
@@ -567,13 +566,13 @@ before_after_color <- c("Before" = "#00bfc4",
                   "After" = "#f8766d")
 
 # Plotting percent of soft quitting and afking before and after change
-motivation_data %>%
+afk_sq_plot <- motivation_data %>%
   group_by(change) %>%
   summarise(
-    soft_quitting_count = sum(soft_quit),      # Count of soft quits
-    afking_count = sum(afk),                  # Count of afks
-    soft_quitting = soft_quitting_count / n() * 100,  # Percentage
-    afking = afking_count / n() * 100,        # Percentage
+    soft_quitting_count = sum(soft_quit),      
+    afking_count = sum(afk),                  
+    soft_quitting = soft_quitting_count / n() * 100,  
+    afking = afking_count / n() * 100,       
     .groups = "drop"
   ) %>%
   pivot_longer(
@@ -598,75 +597,35 @@ motivation_data %>%
   scale_fill_manual(values = before_after_color) +
   scale_y_continuous(labels = label_percent(scale = 1)) + # Format y-axis as percentages
   labs(
-    title = "Problem Quitting Percentages Before and After Change",
-    subtitle = "Totals Displayed Above Each Bar",
+    title = "Problem Quitting Percentages Before and After UI Change",
     x = "Quitting Type",
     y = "Percent of Responses",
     fill = "Timing"
   ) +
-  theme_minimal()
+  custom_theme
+
+afk_sq_plot
+ggsave("Jan Group/Plots/Soft Quitting and AFK.jpeg")
 
 ```
+
 
 How much of hard quitting had a soft quit before it vs a complete session, before and after the change?
-
-```{r}
-# Plotting percent of hard quits after soft-quit vs 
-motivation_data %>%
-  filter(hard_quit == TRUE) %>%
-  group_by(change) %>%
-  summarise(
-    soft_quitting_count = sum(soft_quit),      # Count of soft quits
-    complete_count = sum(!soft_quit),                  # Count of afks
-    soft_quitting = soft_quitting_count / n() * 100,  # Percentage
-    completed_quitting = complete_count / n() * 100,        # Percentage
-    .groups = "drop"
-  ) %>%
-  pivot_longer(
-    cols = c(soft_quitting, completed_quitting),
-    names_to = "quit_type",
-    values_to = "value"
-  ) %>%
-  pivot_longer(
-    cols = c(soft_quitting_count, complete_count),
-    names_to = "quit_type_count",
-    values_to = "count",
-    names_transform = list(quit_type_count = ~ gsub("_count", "", .x)) # Clean names
-  ) %>%
-  filter(quit_type == quit_type_count) %>% # Match percentage and counts
-  ggplot(aes(x = quit_type, y = value, fill = change)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  geom_text(
-    aes(label = count, group = change),
-    position = position_dodge(width = 0.9),
-    vjust = -0.5
-  ) +
-  scale_fill_manual(values = before_after_color) +
-  scale_y_continuous(labels = label_percent(scale = 1)) + # Format y-axis as percentages
-  labs(
-    title = "Percent of Hard Quits from Soft-Quitting vs Complete Sessions: Before and After Change",
-    subtitle = "Totals Displayed Above Each Bar",
-    x = "Quitting Type",
-    y = "Percent of Responses",
-    fill = "Timing"
-  ) +
-  theme_minimal()
-```
-
 
 ```{r}
 # Color Pallet
 soft_complete_color <- c("completed_session" = "#00bfc4",
                   "soft_quitting" = "#f8766d")
 
-motivation_data %>%
+# Plotting percent of hard quits after soft-quit vs completed session
+pie <- motivation_data %>%
   filter(hard_quit == TRUE) %>%
   group_by(change) %>%
   summarise(
-    soft_quitting_count = sum(soft_quit),      # Count of soft quits
-    completed_session_count = sum(!soft_quit),          # Count of complete sessions
-    soft_quitting = soft_quitting_count / n() * 100,  # Percentage of soft quits
-    completed_session = completed_session_count / n() * 100,  # Percentage of complete sessions
+    soft_quitting_count = sum(soft_quit),      
+    completed_session_count = sum(!soft_quit),          
+    soft_quitting = soft_quitting_count / n() * 100,  
+    completed_session = completed_session_count / n() * 100,  
     .groups = "drop"
   ) %>%
   pivot_longer(
@@ -686,22 +645,223 @@ motivation_data %>%
   coord_polar(theta = "y") +  # Convert to pie chart
   facet_wrap(~ change) +  # Facet by 'before' or 'after'
   geom_text(
-    aes(label = paste0(round(value, 1), "%\n", count)), 
+    aes(label = paste0(quit_type, "\n", round(value, 1), "%\n", count)), 
     position = position_stack(vjust = 0.5)
   ) +
   scale_fill_manual(values = soft_complete_color) +
   labs(
-    title = "Percent of Hard Quits from Soft-Quitting vs Complete Sessions",
-    subtitle = "Counts and Percentages Displayed Within Each Pie Chart",
+    title = "Application Closed After Quitting a Session Early",
     x = NULL, y = NULL,
     fill = "Quit Type"
   ) +
   theme_void() +  # Use theme_void to remove axis and grid lines for pie charts
   theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
     strip.text = element_text(size = 12),
-    legend.position = "bottom"
+    legend.position = "none"
+  )
+
+pie
+ggsave("Jan Group/Plots/Hard Quit: Soft vs Complete.jpeg")
+
+```
+
+
+Cox Proportional Hazards Model to check if extended_deadline use has an increased probability of continuing to play.
+
+
+```{r}
+# Function to plot the different survival curves
+surv_plotter <- function(surv_fit_grouped, groups = c("No Extension Used", "Extension Used"), title_specification, xlimit){
+
+# Color Pallet
+custom_color <- c("#f8766d", "#00bfc4")
+
+# Convert summary to dataframe
+surv_df_grouped <- data.frame(
+  time = surv_fit_grouped$time,
+  surv_0 = surv_fit_grouped$surv[, 1],  
+  surv_1 = surv_fit_grouped$surv[, 2],  
+  lower_0 = surv_fit_grouped$lower[, 1],  
+  lower_1 = surv_fit_grouped$lower[, 2],  
+  upper_0 = surv_fit_grouped$upper[, 1],  
+  upper_1 = surv_fit_grouped$upper[, 2]   
+)
+
+# Pivot to long format
+plot <- surv_df_grouped %>%
+  pivot_longer(cols = -time, 
+               names_to = c(".value", "Group"),
+               names_sep = "_") %>%
+  mutate(Group = factor(Group, levels = c("0", "1"), labels = groups)) %>%
+
+
+# Plot grouped Cox-Adjusted Kaplan-Meier curves
+ggplot(aes(x = time, y = surv, color = Group)) +
+  scale_color_manual(values = custom_color) +
+  geom_step() +
+  xlim(0, xlimit) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = Group), alpha = 0.2) +
+  labs(x = "Time (seconds)",
+       y = "Survival Probability", 
+       title = "Cox-Adjusted Survival Curves",
+       subtitle = title_specification) +
+  custom_theme 
+
+return(plot)
+}
+```
+
+
+```{r}
+# Creating data for soft_quitting survival checking
+cox_data_soft <- motivation_data %>%
+  # Because time format was refusing to work
+  mutate(seconds_since_midnight = hour(date) * 3600 + minute(date) * 60 + second(date)) %>%
+  group_by(user_id, play_sesh, session_number, domain_id, session) %>%
+  summarise(duration = ifelse(n() > 1, # Some times only 1 item played
+                       as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)), 
+                       as.integer(response_in_seconds)),
+            extended_deadline_used = any(response_timing == "extended"),
+            soft_quit = any(soft_quit),
+            hard_quit = any(hard_quit),
+            change = first(change),
+            .groups = "drop"
+  )
+
+```
+
+Duration could use further investigation, considering there are some sessions with extreme durations, could be interesting for checking for afks. A decent amount have soft_quit and/or hard_quit true (eyeballing it seems like if soft_quit is true then hard_quit usually is) but plenty don't. Interesting.
+
+```{r}
+# Creating data for hard_quitting survival checking
+cox_data_hard <- motivation_data %>%
+  mutate(seconds_since_midnight = hour(date) * 3600 + minute(date) * 60 + second(date)) %>%
+  group_by(user_id, play_sesh) %>%
+  summarise(
+    duration = ifelse(n() > 1, 
+                      as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)), 
+                       as.integer(response_in_seconds)),
+    extended_deadline_used = any(response_timing == "extended"),
+    soft_quit = any(soft_quit),
+    hard_quit = any(hard_quit),
+    change = first(change),
+    .groups = "drop"
   )
 ```
+
+Duration is interesting yet again, but for a different reason. It turns out that there seems to be a surprising amount of application runs that only consist of performing a single item and then quitting completely. Interesting for future investigation possibly.
+
+
+
+
+```{r, warning=FALSE}
+# Cox model to determine survival probability on session length
+cox_model_soft <- coxph(Surv(duration, soft_quit) ~ extended_deadline_used, data = cox_data_soft)
+
+# Model fitting for plotting
+cox_fit_soft <- survfit(cox_model_soft, newdata = data.frame(extended_deadline_used = c(0, 1)))
+
+# Plot it
+se_plot <- surv_plotter(cox_fit_soft, title_specification = ("Extended Duration and Mid-Session Quitting"), xlimit = 5000)
+
+se_plot
+ggsave("Jan Group/Plots/Soft Quitting Cox-Curve: Extended Duration.jpeg")
+
+```
+
+What about if we only include since the UI change?
+
+```{r, warning=FALSE}
+# Filtered data
+cox_data_soft_after <- cox_data_soft %>%
+  filter(change == "After")
+# Cox model to determine survival probability on session length
+cox_model_soft_after <- coxph(Surv(duration, soft_quit) ~ extended_deadline_used, data = cox_data_soft_after)
+
+# Model fitting for plotting
+cox_fit_soft_after <- survfit(cox_model_soft_after, newdata = data.frame(extended_deadline_used = c(0, 1)))
+
+# Plot it
+se_after_plot <- surv_plotter(cox_fit_soft_after, title_specification = ("Extended Duration and Mid-Session Quitting: After"), xlimit = 5000)
+
+se_after_plot
+ggsave("Jan Group/Plots/Soft Quitting Cox-Curve: Extended Duration only After.jpeg")
+
+```
+
+It appears that the main difference is just the increased confidence intervals due to having less data. This is very promising evidence that the extended deadline is helping students stick with their sessions.
+
+
+```{r, warning=FALSE}
+# Cox model to determine survival probability on session length
+cox_model_hard <- coxph(Surv(duration, hard_quit) ~ extended_deadline_used, data = cox_data_hard)
+
+# Model fitting for plotting
+cox_fit_hard <- survfit(cox_model_hard, newdata = data.frame(extended_deadline_used = c(0, 1)))
+
+# Plot it
+he_plot <- surv_plotter(cox_fit_hard, title_specification = ("Extended Duration and Application Quitting"), xlimit = 5000)
+
+he_plot
+ggsave("Jan Group/Plots/Hard Quitting Cox-Curve: Extended Duration.jpeg")
+
+```
+
+```{r, warning=FALSE}
+# Filtered data
+cox_data_hard_after <- cox_data_hard %>%
+  filter(change == "After")
+# Cox model to determine survival probability on session length
+cox_model_hard_after <- coxph(Surv(duration, hard_quit) ~ extended_deadline_used, data = cox_data_hard_after)
+
+# Model fitting for plotting
+cox_fit_hard_after <- survfit(cox_model_hard_after, newdata = data.frame(extended_deadline_used = c(0, 1)))
+
+# Plot it
+he_after_plot <- surv_plotter(cox_fit_hard_after, title_specification = ("Extended Duration and Application Quitting: After"), xlimit = 5000)
+
+he_after_plot
+ggsave("Jan Group/Plots/Hard Quitting Cox-Curve: Extended Duration only After.jpeg")
+
+```
+
+It is only slightly, however, the gap between using the extended deadline and not has actually increased, with extended increasing in survival chance and non-extended use decreasing in survival chance. Again, more evidence that it is a helpful intervention for motivating students to keep going. 
+
+
+```{r}
+# Testing with runs of at least 1 session played
+# Creating data for hard_quitting survival checking
+cox_data_hard_complete <- motivation_data %>%
+  mutate(seconds_since_midnight = hour(date) * 3600 + minute(date) * 60 + second(date)) %>%
+  group_by(user_id, play_sesh) %>%
+  summarise(duration = ifelse(n() > 1, 
+                              as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)), 
+                              response_in_seconds),
+            extended_deadline_used = any(response_timing == "extended"),
+            complete_session = any(soft_quit == FALSE),
+            soft_quit = any(soft_quit),
+            hard_quit = any(hard_quit),
+            .groups = "drop"
+  ) %>%
+  filter(complete_session == TRUE)
+```
+
+Still quite a lot of application runs that are very short even when running at least 1 complete session. 
+
+```{r, warning=FALSE}
+# Cox model to determine survival probability on session length
+cox_model_hard_complete <- coxph(Surv(duration, hard_quit) ~ extended_deadline_used, data = cox_data_hard_complete)
+
+# Model fitting for plotting
+cox_fit_hard_complete <- survfit(cox_model_hard_complete, newdata = data.frame(extended_deadline_used = c(0, 1)))
+
+# Plot it
+surv_plotter(cox_fit_hard_complete, groups = c("no extended", "extended"), title_specification = ("Extended Duration and Application Quitting: At Least 1"), xlimit = 5000)
+
+```
+
+Also doesn't seem to change the curve very much, only increasing the survival chance very slightly.
 
 
 ### DESCRIPTIVES
