@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 # Loading packages
 library(cowplot)
+library(scales)
 library(plotly)
 library(gridExtra)
 library(tidyverse)
@@ -108,7 +109,8 @@ ed_logs <- ed_logs %>%
   mutate(time_weeks = ceiling(as.numeric(
     difftime(date, start_date, units = "weeks")
   ))) %>%
-  mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks)) %>%  # Ensure any negative or 0 values are set to 1
+  mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks),
+         late_response = ifelse(response_in_seconds > deadline, 1, 0)) %>%  # Ensure any negative or 0 values are set to 1
   ungroup() 
 
 ```
@@ -179,6 +181,35 @@ ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = m
   theme(legend.position = "top") +
   labs(x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals", legend = "Mode show_coins")
 ```
+
+Zooming into this year and changing to weekly.
+
+```{r}
+# Getting data needed for sankey plot
+sankey_data <- ed_logs %>%
+  select(user_id, show_coins, time_weeks) %>%
+  filter(user_id %in% swappers,
+         time_weeks > 52) %>%
+  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE))
+
+
+# Group by individual and interval, then summarize
+sankey_tibble <- sankey_data %>%
+  group_by(user_id, interval) %>%
+  summarize(mode_show_coins = names(which.max(table(show_coins)))) %>%
+  ungroup()
+
+# Make the plot
+sankey_tibble %>%
+ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  theme_minimal() +
+  geom_flow(color = "darkgray") +
+  geom_stratum() +
+  theme(legend.position = "top") +
+  labs(x = "Weekly Intervals", y = "Users", title = "Mode show_coins across weekly Intervals", legend = "Mode show_coins")
+```
+
+
 Between section 30 and 31 is when the change is made. Which happens to also be paired by a major exodus of students from not showing to then showing, meaning that at least to some extent communication of the feature has occurred outside of personal experience.
 
 ```{r}
@@ -238,10 +269,10 @@ show_count %>%
   mutate(user_id = reorder(user_id, -prop, mean)) %>% # Reorder by proportion
 ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coins)) +
   geom_line() +
-  scale_color_manual(values = c("1" = "red", "0" = "blue"),
-                     labels = c("Showing", "Not Showing"),
+  scale_color_manual(values = c("1" = "#00bfc4", "0" = "#f8766d"),
+                     labels = c("Not Showing", "Showing"),
                      name = "Coins") +
-  labs(title = "User Coin Showing Behavior", subtitle = "Ordered by Coins Showing / Total Played", x = "Users", y = "Count") +
+  labs(title = "User Coin Showing Behavior", subtitle = "Ordered by Proportion of Coins Showing & Total Played", x = "Users", y = "Count") +
   theme_minimal() +
   theme(axis.text.x = element_blank()) 
 
@@ -356,16 +387,17 @@ braves_all <- ed_diff_tibble %>%
          switched = mode_difficulty != first_cat & interval > 1)
 
 # Grouping and labeling based on switching and starting choices
-switch_tracking_all <- braves_all %>%
+suppressWarnings(switch_tracking_all <- braves_all %>% # Gives a false warning about inf
   group_by(user_id) %>%
-  mutate(first_switch_week = if_else(switched, interval, NA_integer_), # Week of first switch
-    first_switch_week = min(first_switch_week, na.rm = TRUE), # Get the earliest switch
+  mutate(first_switch_week = if_else(switched, interval, NA_integer_), # Week of switch
+    first_switch_week = case_when(any(switched) ~ min(first_switch_week, na.rm = TRUE),
+                                  TRUE ~ NA_integer_),# Get the earliest switch
     stay_switched = if_else(                           # Check if they stay switched
       interval >= first_switch_week & switched, 
       mode_difficulty, 
       NA_character_
     )
-  ) 
+  )) 
 # Groups labeled and response types counted
 stayers_all <- switch_tracking_all %>%
   summarise(
@@ -400,7 +432,7 @@ stayers_all <- switch_tracking_all %>%
   ungroup()
 
 # Joining switch labels and ed_logs relevant stuff
-fbg_data <- ed_logs %>%
+fgb_data <- ed_logs %>%
   select(user_id, difficulty, time_weeks, late_response, answer, date) %>%
   mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
          difficulty = factor(difficulty,
@@ -467,11 +499,213 @@ ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) 
 
 
 
+### Motivation
+
+how many rage quits after non-answer before vs how many rq after late response and/or non-answer after. soft quits after late response, vs non_response. Use Threshold modelling (psych) for measuring build up and response w/ and w/out for quitting.
+
 ```{r}
-sum(ed_logs$session == "learning_goal")
+# Of note, domain 5 is the only to not have 10/session but 15
+# Data for motivation analysis: soft-quit, hard-quit, sessions per instance
+motivation_data <- ed_logs %>%
+  select(user_id, answer, date, new_user_domain_session_count, correct_answered, grade, domain_id, deadline, late_response, session) %>%
+  rename(session_number = new_user_domain_session_count) %>%
+  # Getting users who have before and after data and just this school year
+  mutate(change = if_else(date < change_date, "Before", "After")) %>%
+  filter(date > as.Date("2024-09-02") & any(change == "After")) %>%
+  # For calculating hard quitting
+  arrange(user_id, date) %>%
+  mutate(
+    time_diff = as.numeric(difftime(date, lag(date, default = first(date)), units = "mins")),
+    play_sesh = cumsum(ifelse(is.na(time_diff) | time_diff > 30, 1, 0))
+  ) %>%
+  # Make hard quitting tracker
+  group_by(user_id, play_sesh) %>%
+  mutate(
+    hard_quit = if_else(lead(play_sesh, default = first(play_sesh)) != play_sesh | is.na(lead(play_sesh)), TRUE, FALSE)
+  ) %>%
+  ungroup() %>%
+  select(-time_diff)
+
+# Keeping track of soft-quitting and afk in session
+softies <- motivation_data %>%
+  select(user_id, domain_id, session_number, play_sesh, session) %>%
+  mutate(full = if_else(domain_id == 5, 15, 10)) %>%
+  group_by(user_id, domain_id, session_number, play_sesh, session, full) %>%
+  summarise(count = n(),
+            soft_quit = case_when(all(count != full & session == "domain") ~ TRUE,
+                           all(count == full & session == "domain") ~ FALSE,
+                           all(count %% full != 0 & session == "learning_goal") ~ TRUE,
+                           all(count %% full == 0 & session == "learning_goal") ~ FALSE,
+                           TRUE ~ NA),
+            .groups = "drop") %>%
+  select(-count, -full)
+
+
+# Merging soft-quit into motivation data
+motivation_data <- motivation_data %>%
+  left_join(softies) %>%
+  mutate(response_timing = case_when(late_response == 1 & answer != "…" ~ "extended",
+                                     answer == "…" & date < change_date ~ "non_response_before",
+                                     answer == "…" & date >= change_date ~ "non_response_after",
+                                     TRUE ~ "on_time"))
+
+# Calculating if session had likely afk
+afking <- motivation_data %>%
+  group_by(user_id, domain_id, session_number, play_sesh, session) %>%
+  summarise(afk = any(rle(answer == "…")$values & rle(answer == "…")$lengths >= 3))
+  
+# Merging back into motivation_data
+motivation_data <- motivation_data %>%
+  left_join(afking) %>%
+  mutate(change = factor(change, levels = c("Before", "After")))
 ```
 
+```{r}
+# Making the visualizations
+# Color Pallette
+before_after_color <- c("Before" = "#00bfc4",
+                  "After" = "#f8766d")
+
+# Plotting percent of soft quitting and afking before and after change
+motivation_data %>%
+  group_by(change) %>%
+  summarise(
+    soft_quitting_count = sum(soft_quit),      # Count of soft quits
+    afking_count = sum(afk),                  # Count of afks
+    soft_quitting = soft_quitting_count / n() * 100,  # Percentage
+    afking = afking_count / n() * 100,        # Percentage
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(soft_quitting, afking),
+    names_to = "quit_type",
+    values_to = "value"
+  ) %>%
+  pivot_longer(
+    cols = c(soft_quitting_count, afking_count),
+    names_to = "quit_type_count",
+    values_to = "count",
+    names_transform = list(quit_type_count = ~ gsub("_count", "", .x)) # Clean names
+  ) %>%
+  filter(quit_type == quit_type_count) %>% # Match percentage and counts
+  ggplot(aes(x = quit_type, y = value, fill = change)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(
+    aes(label = count, group = change),
+    position = position_dodge(width = 0.9),
+    vjust = -0.5
+  ) +
+  scale_fill_manual(values = before_after_color) +
+  scale_y_continuous(labels = label_percent(scale = 1)) + # Format y-axis as percentages
+  labs(
+    title = "Problem Quitting Percentages Before and After Change",
+    subtitle = "Totals Displayed Above Each Bar",
+    x = "Quitting Type",
+    y = "Percent of Responses",
+    fill = "Timing"
+  ) +
+  theme_minimal()
+
+```
+
+How much of hard quitting had a soft quit before it vs a complete session, before and after the change?
+
+```{r}
+# Plotting percent of hard quits after soft-quit vs 
+motivation_data %>%
+  filter(hard_quit == TRUE) %>%
+  group_by(change) %>%
+  summarise(
+    soft_quitting_count = sum(soft_quit),      # Count of soft quits
+    complete_count = sum(!soft_quit),                  # Count of afks
+    soft_quitting = soft_quitting_count / n() * 100,  # Percentage
+    completed_quitting = complete_count / n() * 100,        # Percentage
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(soft_quitting, completed_quitting),
+    names_to = "quit_type",
+    values_to = "value"
+  ) %>%
+  pivot_longer(
+    cols = c(soft_quitting_count, complete_count),
+    names_to = "quit_type_count",
+    values_to = "count",
+    names_transform = list(quit_type_count = ~ gsub("_count", "", .x)) # Clean names
+  ) %>%
+  filter(quit_type == quit_type_count) %>% # Match percentage and counts
+  ggplot(aes(x = quit_type, y = value, fill = change)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(
+    aes(label = count, group = change),
+    position = position_dodge(width = 0.9),
+    vjust = -0.5
+  ) +
+  scale_fill_manual(values = before_after_color) +
+  scale_y_continuous(labels = label_percent(scale = 1)) + # Format y-axis as percentages
+  labs(
+    title = "Percent of Hard Quits from Soft-Quitting vs Complete Sessions: Before and After Change",
+    subtitle = "Totals Displayed Above Each Bar",
+    x = "Quitting Type",
+    y = "Percent of Responses",
+    fill = "Timing"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+# Color Pallet
+soft_complete_color <- c("completed_session" = "#00bfc4",
+                  "soft_quitting" = "#f8766d")
+
+motivation_data %>%
+  filter(hard_quit == TRUE) %>%
+  group_by(change) %>%
+  summarise(
+    soft_quitting_count = sum(soft_quit),      # Count of soft quits
+    completed_session_count = sum(!soft_quit),          # Count of complete sessions
+    soft_quitting = soft_quitting_count / n() * 100,  # Percentage of soft quits
+    completed_session = completed_session_count / n() * 100,  # Percentage of complete sessions
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = c(soft_quitting, completed_session),
+    names_to = "quit_type",
+    values_to = "value"
+  ) %>%
+  pivot_longer(
+    cols = c(soft_quitting_count, completed_session_count),
+    names_to = "quit_type_count",
+    values_to = "count",
+    names_transform = list(quit_type_count = ~ gsub("_count", "", .x))  # Clean names
+  ) %>%
+  filter(quit_type == quit_type_count) %>%  # Match percentage and counts
+  ggplot(aes(x = "", y = value, fill = quit_type)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +  # Convert to pie chart
+  facet_wrap(~ change) +  # Facet by 'before' or 'after'
+  geom_text(
+    aes(label = paste0(round(value, 1), "%\n", count)), 
+    position = position_stack(vjust = 0.5)
+  ) +
+  scale_fill_manual(values = soft_complete_color) +
+  labs(
+    title = "Percent of Hard Quits from Soft-Quitting vs Complete Sessions",
+    subtitle = "Counts and Percentages Displayed Within Each Pie Chart",
+    x = NULL, y = NULL,
+    fill = "Quit Type"
+  ) +
+  theme_void() +  # Use theme_void to remove axis and grid lines for pie charts
+  theme(
+    strip.text = element_text(size = 12),
+    legend.position = "bottom"
+  )
+```
+
+
 ### DESCRIPTIVES
+
 ```{r}
 # Check the structure and unique values in domain_id
 str(ed_logs)
@@ -722,115 +956,14 @@ late_response_by_domain_difficulty %>%
 
 ```
 
-
-
-
-Ender: analyzing growth slopes in the first 2 months of 2024 (Sep-Oct 25) to growth slopes after the change (Oct 25 - Dec)
-
 ```{r}
-### Checking amount of items played in the two periods, per domain ###
-
-items_played <- ed_logs %>%
-  mutate(period = case_when(
-    date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
-    date > "2024-10-25 23:59:59" ~ "Oct-Dec",
-    TRUE ~ "other")) %>%
-  group_by(domain_id, period) %>%
-  summarize(items_played = n()) %>%
-  filter(period != "other") %>%
-  arrange(domain_id, desc(period))
-
-items_played %>%
-  ggplot(aes(x = domain_id, y = items_played, fill = period)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(title = "Items Played by Domain and Period", x = "Domain", y = "Items Played")
+# Percent of late responses that went past extended
+sum(ed_logs_after$answer == "…")/sum(ed_logs_after$late_response == 1) * 100 # 23.92%
 ```
 
-Data structuring for multilevel analysis
 
-```{r}
-# Create period variable
-period_logs <- ed_logs %>%
-  mutate(period = case_when(
-    date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
-    date > "2024-10-25 23:59:59" ~ "Oct-Dec",
-    TRUE ~ "other")) %>%
-  filter(period != "other") %>%
-  filter(!is.na(new_user_domain_q_score))
 
-# Structure data to have a Q-score for every session entry
-multilevel_data <- period_logs %>%
-  arrange(user_id, period, domain_id, new_user_domain_session_count, new_user_domain_modified_count) %>%
-  group_by(user_id, period, domain_id, new_user_domain_session_count) %>%
-  summarize(q_score = last(new_user_domain_q_score), .groups = "drop") %>%
-  # need to re-attach grade & difficulty to data
-  left_join(period_logs %>%
-              select(user_id, period, grade, domain_id, difficulty, new_user_domain_session_count,
-                     new_user_domain_modified_count),
-            by = c("user_id", "period", "domain_id", "new_user_domain_session_count"))
 
-# Re-number sessions to start from 1 (for each period separately)
-multilevel_data_unique <- multilevel_data %>%
-  distinct(user_id, period, domain_id, new_user_domain_session_count, .keep_all = TRUE) %>%
-  group_by(user_id, period, domain_id) %>%
-  mutate(session = row_number()) %>%
-  ungroup() %>%
-  select(-new_user_domain_modified_count, -new_user_domain_session_count)
-
-# Check observation nr per grade, domain
-table(multilevel_data_unique$grade)
-table(multilevel_data_unique$domain_id)
-
-# Remove data for grades 1, 2, and 9-19
-multilevel_data_unique$grade <- as.integer(multilevel_data_unique$grade)
-multilevel_data_unique <- multilevel_data_unique %>%
-  filter(!(grade == 1) & !(grade == 2) & !(grade >= 9 & grade <= 19))
-
-multilevel_data_unique$difficulty <- as.factor(multilevel_data_unique$difficulty)
-multilevel_data_unique$period <- as.factor(multilevel_data_unique$period)
-multilevel_data_unique$domain_id <- as.factor(multilevel_data_unique$domain_id)
-multilevel_data_unique$grade <- as.factor(multilevel_data_unique$grade)
-
-# Remove sessions over 20
-multilevel_data_unique <- multilevel_data_unique %>%
-  filter(session <= 20)
-
-# Scale session & q_score
-multilevel_data_unique <- multilevel_data_unique %>%
-  mutate(session = scale(session)) %>%
-  group_by(domain_id) %>%
-  mutate(q_score = scale(q_score)) %>%
-  ungroup()
-```
-
-```{r}
-### Multilevel Analysis ###
-
-# Simpler model; no interactions between growth slopes, domains and grades
-simple_model <- lmer(
-  q_score ~ session * period + session * difficulty + grade + domain_id +
-  (1 + session | user_id),
-  data = multilevel_data_unique,
-  control = lmerControl(optCtrl = list(maxfun = 10000))
-)
-
-# Complex model: allows for interactions between growth slopes, domains and grades
-full_model <- lmer(
-  q_score ~ session * period * domain_id * grade + session * difficulty +
-  (1 + session | user_id),
-  data = multilevel_data_unique,
-  control = lmerControl(optCtrl = list(maxfun = 10000))
-)
-
-summary(full_model)
-
-```
-
-```{r}
-# Comparing simple vs complex model
-anova(simple_model, full_model)
-```
 
 
 ```{r}
