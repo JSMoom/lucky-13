@@ -464,6 +464,39 @@ collapsed_long <- collapsed_fgb %>%
   )
 ```
 
+
+```{r}
+# All combined
+# Setting Color Scheme
+response_color <- c(
+  "extended_deadline_total" = "#E69F00",
+  "non_response_before" = "#56B4E9",
+  "non_response_after" = "#009E73"
+)
+
+# Faceted bar graph
+full_plot <- ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = response_color) +
+  labs(
+    title = "Response Type Totals",
+    x = "Response Type",
+    y = "Total Responses",
+    fill = "Response Type"
+  ) +
+  custom_theme +
+  theme(
+    strip.text = element_text(size = 12),
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank()
+  ) 
+
+full_plot
+ggsave("Jan Group/Plots/Response Totals.jpeg")
+```
+
+
 ```{r}
 # Time to graph it
 # Setting Color Scheme
