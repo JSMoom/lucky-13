@@ -217,7 +217,9 @@ data <- data %>%
 reference_date <- as.Date("2024-10-25")
 
 # Add the 'new_UI' column
-data$new_UI <- ifelse(data$date > reference_date, "After", "Before")
+data$new_UI <- factor(ifelse(data$date > reference_date, "After", "Before"), 
+                      levels = c("Before", "After"))
+
 
 # Map domain IDs to domain names
 domain_names <- c(
@@ -244,22 +246,28 @@ custom_theme <- theme_minimal() +
     legend.text = element_text(size = 10)
   )
 
+custom_colors <- c("Before" = "#00BFC4", "After" = "#F8766D")  # Adjust colors as needed
+
 
 
 ## ---------------------------------------------------------------------------- No Answer - with Error bars
+
+
 plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
-    sd = sd(no_answer) * 100,  # Use sd to calculate standard deviation
+    sd = sd(no_answer) * 100,  
     .groups = 'drop'
   ) %>%
   ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(xmin = no_answer_percentage - sd, xmax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer by Domain", y = "Domain", x = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot2 <- data %>%
   group_by(new_UI, grade) %>%
@@ -272,8 +280,10 @@ plot2 <- data %>%
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer by Grade", x = "Grade", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot3 <- data %>%
   group_by(new_UI, modeDifficulty) %>%
@@ -283,18 +293,23 @@ plot3 <- data %>%
     .groups = 'drop'
   ) %>%
   mutate(
-    modeDifficultyLabel = case_when(
-      modeDifficulty == "0" ~ "Easy",
-      modeDifficulty == "1" ~ "Medium",
-      modeDifficulty == "2" ~ "Hard"
+    modeDifficultyLabel = factor(
+      case_when(
+        modeDifficulty == "0" ~ "Easy",
+        modeDifficulty == "1" ~ "Medium",
+        modeDifficulty == "2" ~ "Hard"
+      ),
+      levels = c("Easy", "Medium", "Hard") # Set the desired order
     )
   ) %>%
   ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot4 <- data %>%
   group_by(new_UI, learning_goal) %>%
@@ -307,64 +322,86 @@ plot4 <- data %>%
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
 
-# Combine all plots
-grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 
-## ---------------------------------------------------------------------------- No Answer - without Error
+# Combine all plots into a 2x2 grid
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+## ---------------------------------------------------------------------------- No Answer - without Error bars
+
+
 plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
-    no_answer_percentage = mean(no_answer) * 100
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,  
+    .groups = 'drop'
   ) %>%
   ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer by Domain", y = "Domain", x = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot2 <- data %>%
   group_by(new_UI, grade) %>%
   summarise(
-    no_answer_percentage = mean(no_answer) * 100
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,
+    .groups = 'drop'
   ) %>%
   ggplot(aes(x = factor(grade), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer by Grade", x = "Grade", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot3 <- data %>%
   group_by(new_UI, modeDifficulty) %>%
   summarise(
-    no_answer_percentage = mean(no_answer) * 100
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,
+    .groups = 'drop'
   ) %>%
   mutate(
-    modeDifficultyLabel = case_when(
-      modeDifficulty == "0" ~ "Easy",
-      modeDifficulty == "1" ~ "Medium",
-      modeDifficulty == "2" ~ "Hard"
+    modeDifficultyLabel = factor(
+      case_when(
+        modeDifficulty == "0" ~ "Easy",
+        modeDifficulty == "1" ~ "Medium",
+        modeDifficulty == "2" ~ "Hard"
+      ),
+      levels = c("Easy", "Medium", "Hard") # Set the desired order
     )
   ) %>%
   ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot4 <- data %>%
   group_by(new_UI, learning_goal) %>%
   summarise(
-    no_answer_percentage = mean(no_answer) * 100
+    no_answer_percentage = mean(no_answer) * 100,
+    sd = sd(no_answer) * 100,
+    .groups = 'drop'
   ) %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of No Answer for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
   custom_theme
 
-# Combine all plots
-grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 
-## ----------------------------------------------------------------------------- Statistical tests
+# Combine all plots into a 2x2 grid
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
+## ------------------------------------------------------------------ Statistical testss
+
 group_summary <- data %>%
   group_by(new_UI) %>%
   summarise(
@@ -424,19 +461,22 @@ results_by_learning_goal
 
 
 # ---------------------------------------------------------------------------- Help - with Error Bars
+
 plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
     help_percentage = mean(help) * 100,
-    sd = sd(help) * 100,  # Use sd to calculate standard deviation
+    sd = sd(help) * 100,  
     .groups = 'drop'
   ) %>%
   ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(xmin = help_percentage - sd, xmax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help by Domain", y = "Domain", x = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot2 <- data %>%
   group_by(new_UI, grade) %>%
@@ -449,8 +489,10 @@ plot2 <- data %>%
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help by Grade", x = "Grade", y = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot3 <- data %>%
   group_by(new_UI, modeDifficulty) %>%
@@ -460,18 +502,23 @@ plot3 <- data %>%
     .groups = 'drop'
   ) %>%
   mutate(
-    modeDifficultyLabel = case_when(
-      modeDifficulty == "0" ~ "Easy",
-      modeDifficulty == "1" ~ "Medium",
-      modeDifficulty == "2" ~ "Hard"
+    modeDifficultyLabel = factor(
+      case_when(
+        modeDifficulty == "0" ~ "Easy",
+        modeDifficulty == "1" ~ "Medium",
+        modeDifficulty == "2" ~ "Hard"
+      ),
+      levels = c("Easy", "Medium", "Hard") # Set the desired order
     )
   ) %>%
   ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot4 <- data %>%
   group_by(new_UI, learning_goal) %>%
@@ -484,61 +531,82 @@ plot4 <- data %>%
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
 
-# Combine all plots
+
+# Combine all plots into a 2x2 grid
 grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 
 # ---------------------------------------------------------------------------- Help - without Error Bars
 plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
-    help_percentage = mean(help) * 100
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,  
+    .groups = 'drop'
   ) %>%
   ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help by Domain", y = "Domain", x = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot2 <- data %>%
   group_by(new_UI, grade) %>%
   summarise(
-    help_percentage = mean(help) * 100
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,
+    .groups = 'drop'
   ) %>%
   ggplot(aes(x = factor(grade), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help by Grade", x = "Grade", y = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot3 <- data %>%
   group_by(new_UI, modeDifficulty) %>%
   summarise(
-    help_percentage = mean(help) * 100
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,
+    .groups = 'drop'
   ) %>%
   mutate(
-    modeDifficultyLabel = case_when(
-      modeDifficulty == "0" ~ "Easy",
-      modeDifficulty == "1" ~ "Medium",
-      modeDifficulty == "2" ~ "Hard"
+    modeDifficultyLabel = factor(
+      case_when(
+        modeDifficulty == "0" ~ "Easy",
+        modeDifficulty == "1" ~ "Medium",
+        modeDifficulty == "2" ~ "Hard"
+      ),
+      levels = c("Easy", "Medium", "Hard") # Set the desired order
     )
   ) %>%
   ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
+
 
 plot4 <- data %>%
   group_by(new_UI, learning_goal) %>%
   summarise(
-    help_percentage = mean(help) * 100
+    help_percentage = mean(help) * 100,
+    sd = sd(help) * 100,
+    .groups = 'drop'
   ) %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
   labs(title = "Percentage of Help for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of Help", fill = "Update on Oct 25th") +
   custom_theme
 
-# Combine all plots
+
+# Combine all plots into a 2x2 grid
 grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 
 ##------------------------------------------------------------------------------ Statistical analysis
@@ -600,307 +668,188 @@ results_by_learning_goal
 
 # ---------------------------------------------------------------------------- Percentage correct without
 
-# Add "Before" and "After" labels to the new_UI column
-data$new_UI <- ifelse(data$date > reference_date, "After", "Before")
-
-# Calculate correct answers percentage by domain with UI status
-correct_answers_domain <- data %>%
-  group_by(new_UI, domain_id) %>%
-  summarise(
-    total_responses = n(),
-    correct_responses = sum(correct_answered == "1"),
-    correct_percentage = mean(correct_answered == "1") * 100
-  ) %>%
-  ungroup() %>%
-  mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After")  # Label as "Old" or "New"
-  )
-
-correct_answers_domain$domain_name <- domain_names[as.character(correct_answers_domain$domain_id)]
-
-plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  labs(
-    title = "Percentage of Correct Answers by Domain",
-    x = "Percentage of Correct Answers",
-    y = "Domain",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
-
-# Calculate correct answers percentage by grade
-correct_answers_grade <- data %>%
-  group_by(new_UI, grade) %>%
-  summarise(
-    total_responses = n(),
-    correct_responses = sum(correct_answered == "1"),
-    correct_percentage = mean(correct_answered == "1") * 100
-  ) %>%
-  ungroup() %>%
-  mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After")
-  )
-
-plot2 <- ggplot(correct_answers_grade, aes(x = grade, y = correct_percentage, fill = UI_Status)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  labs(
-    title = "Percentage of Correct Answers by Grade",
-    x = "Grade",
-    y = "Percentage of Correct Answers",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
-
-# Calculate correct answers percentage by difficulty level
-correct_answers_difficulty <- data %>%
-  group_by(new_UI, modeDifficulty) %>%
-  summarise(
-    total_responses = n(),
-    correct_responses = sum(correct_answered == "1"),
-    correct_percentage = mean(correct_answered == "1") * 100
-  ) %>%
-  ungroup() %>%
-  mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
-    Difficulty = case_when(
-      modeDifficulty == "0" ~ "Easy",
-      modeDifficulty == "1" ~ "Medium",
-      modeDifficulty == "2" ~ "Hard"
-    )
-  )
-
-plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  labs(
-    title = "Percentage of Correct Answers by Difficulty",
-    x = "Difficulty",
-    y = "Percentage of Correct Answers",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
-
-# Calculate correct answers percentage by learning goal
-correct_answers_learning <- data %>%
-  group_by(new_UI, learning_goal) %>%
-  summarise(
-    total_responses = n(),
-    correct_responses = sum(correct_answered == "1"),
-    correct_percentage = mean(correct_answered == "1") * 100
-  ) %>%
-  ungroup() %>%
-  mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
-    LearningGoal = ifelse(learning_goal == 1, "Yes", "No")
-  )
-
-plot4 <- ggplot(correct_answers_learning, aes(x = Learning_Goal, y = correct_percentage, fill = UI_Status)) +
-  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  labs(
-    title = "Percentage of Correct Answers by Learning Goal",
-    x = "Learning Goal",
-    y = "Percentage of Correct Answers",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
-
-# Combine all plots using gridExtra
-grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
-
-
-# ---------------------------------------------------------------------------- Percentage correct without
-
-# Calculate correct answers percentage by domain with UI status and SD
 correct_answers_domain <- data %>%
   group_by(new_UI, domain_id) %>%
   summarise(
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+    .groups = 'drop'
   ) %>%
-  ungroup() %>%
   mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
+    UI_Status = new_UI,  # Consistent with "Before" and "After"
     domain_name = domain_names[as.character(domain_id)]
   )
 
 plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(
-    xmin = correct_percentage - correct_sd,
-    xmax = correct_percentage + correct_sd
-  ),
-  position = position_dodge(width = 0.8),
-  width = 0.2
-  ) +
-  labs(
-    title = "Percentage of Correct Answers by Domain",
-    x = "Percentage of Correct Answers",
-    y = "Domain",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Domain", x = "Percentage of Correct Answers", y = "Domain", fill = "Update on Oct 25th") +
+  custom_theme
 
-# ----------------------------------------------------------------------------
-# Calculate correct answers percentage by grade with SD
 correct_answers_grade <- data %>%
   group_by(new_UI, grade) %>%
   summarise(
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+    .groups = 'drop'
   ) %>%
-  ungroup() %>%
-  mutate(UI_Status = ifelse(new_UI == "Before", "Before", "After"))
+  mutate(UI_Status = new_UI)
 
-plot2 <- ggplot(correct_answers_grade, aes(x = grade, y = correct_percentage, fill = UI_Status)) +
+plot2 <- ggplot(correct_answers_grade, aes(x = factor(grade), y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(
-    ymin = correct_percentage - correct_sd,
-    ymax = correct_percentage + correct_sd
-  ),
-  position = position_dodge(width = 0.8),
-  width = 0.2
-  ) +
-  labs(
-    title = "Percentage of Correct Answers by Grade",
-    x = "Grade",
-    y = "Percentage of Correct Answers",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Grade", x = "Grade", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  custom_theme
 
-# ----------------------------------------------------------------------------
-# Calculate correct answers percentage by difficulty with SD
+
 correct_answers_difficulty <- data %>%
   group_by(new_UI, modeDifficulty) %>%
   summarise(
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+    .groups = 'drop'
   ) %>%
-  ungroup() %>%
   mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
-    Difficulty = case_when(
-      modeDifficulty == "0" ~ "Easy",
-      modeDifficulty == "1" ~ "Medium",
-      modeDifficulty == "2" ~ "Hard"
+    UI_Status = new_UI,
+    Difficulty = factor(
+      case_when(
+        modeDifficulty == "0" ~ "Easy",
+        modeDifficulty == "1" ~ "Medium",
+        modeDifficulty == "2" ~ "Hard"
+      ),
+      levels = c("Easy", "Medium", "Hard")  # Set the correct order
     )
   )
 
 plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(
-    ymin = correct_percentage - correct_sd,
-    ymax = correct_percentage + correct_sd
-  ),
-  position = position_dodge(width = 0.8),
-  width = 0.2
-  ) +
-  labs(
-    title = "Percentage of Correct Answers by Difficulty",
-    x = "Difficulty",
-    y = "Percentage of Correct Answers",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Difficulty", x = "Difficulty", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  custom_theme
 
-# ----------------------------------------------------------------------------
-# Calculate correct answers percentage by learning goal with SD
 correct_answers_learning <- data %>%
   group_by(new_UI, learning_goal) %>%
   summarise(
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    correct_sd = sd(correct_answered == "1") * 100  # Standard deviation
+    .groups = 'drop'
   ) %>%
-  ungroup() %>%
   mutate(
-    UI_Status = ifelse(new_UI == "Before", "Before", "After"),
-    LearningGoal = ifelse(learning_goal == 1, "Yes", "No")
+    UI_Status = new_UI,
+    LearningGoal = factor(ifelse(learning_goal == 1, "Yes", "No"), levels = c("No", "Yes"))
   )
 
 plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(
-    ymin = correct_percentage - correct_sd,
-    ymax = correct_percentage + correct_sd
-  ),
-  position = position_dodge(width = 0.8),
-  width = 0.2
-  ) +
-  labs(
-    title = "Percentage of Correct Answers by Learning Goal",
-    x = "Learning Goal",
-    y = "Percentage of Correct Answers",
-    fill = "Update on Oct 25th"
-  ) +
-  theme_minimal() +
-  scale_fill_manual(values = c("Before" = "#57b0b5", "After" = "#fe6c66")) +
-  theme(
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    legend.position = "bottom",
-    legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10)
-  )
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Learning Goal", x = "Learning Goal", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  custom_theme
 
-# ----------------------------------------------------------------------------
-# Combine all plots using gridExtra
 grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 
+
+# ---------------------------------------------------------------------------- Percentage correct with
+
+correct_answers_domain <- data %>%
+  group_by(new_UI, domain_id) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    sd = sd(correct_answered == "1") * 100,  # Calculate SD
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    UI_Status = new_UI,  
+    domain_name = domain_names[as.character(domain_id)]
+  )
+
+plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(xmin = correct_percentage - sd, xmax = correct_percentage + sd), 
+                width = 0.2, position = position_dodge(0.8)) +
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Domain", x = "Percentage of Correct Answers", y = "Domain", fill = "Update on Oct 25th") +
+  custom_theme
+
+
+correct_answers_grade <- data %>%
+  group_by(new_UI, grade) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    sd = sd(correct_answered == "1") * 100,
+    .groups = 'drop'
+  ) %>%
+  mutate(UI_Status = new_UI)
+
+plot2 <- ggplot(correct_answers_grade, aes(x = factor(grade), y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
+                width = 0.2, position = position_dodge(0.8)) +
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Grade", x = "Grade", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  custom_theme
+
+
+correct_answers_difficulty <- data %>%
+  group_by(new_UI, modeDifficulty) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    sd = sd(correct_answered == "1") * 100,
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    UI_Status = new_UI,
+    Difficulty = factor(
+      case_when(
+        modeDifficulty == "0" ~ "Easy",
+        modeDifficulty == "1" ~ "Medium",
+        modeDifficulty == "2" ~ "Hard"
+      ),
+      levels = c("Easy", "Medium", "Hard")
+    )
+  )
+
+plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
+                width = 0.2, position = position_dodge(0.8)) +
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Difficulty", x = "Difficulty", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  custom_theme
+
+
+correct_answers_learning <- data %>%
+  group_by(new_UI, learning_goal) %>%
+  summarise(
+    total_responses = n(),
+    correct_responses = sum(correct_answered == "1"),
+    correct_percentage = mean(correct_answered == "1") * 100,
+    sd = sd(correct_answered == "1") * 100,
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    UI_Status = new_UI,
+    LearningGoal = factor(ifelse(learning_goal == 1, "Yes", "No"), levels = c("No", "Yes"))
+  )
+
+plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_percentage, fill = UI_Status)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
+                width = 0.2, position = position_dodge(0.8)) +
+  scale_fill_manual(values = custom_colors) +  
+  labs(title = "Percentage of Correct Answers by Learning Goal", x = "Learning Goal", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  custom_theme
+
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 # ---------------------------------------------------------------------------- Testing significance 
 
 # Convert `correct_answered` to numeric
