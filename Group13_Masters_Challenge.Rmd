@@ -209,7 +209,8 @@ sankey_data <- ed_logs %>%
 sankey_tibble <- sankey_data %>%
   group_by(user_id, interval, start_date) %>%
   summarize(mode_show_coins = names(which.max(table(show_coins)))) %>%
-  ungroup()
+  ungroup() %>%
+  mutate(mode_show_coins = if_else(mode_show_coins == 0, "No Show", "Show"))
 
 # Make the plot
 coins_sankey <- sankey_tibble %>%
@@ -218,7 +219,7 @@ ggplot(aes(x = start_date, stratum = mode_show_coins, alluvium = user_id, fill =
   geom_flow(color = "darkgray") +
   geom_stratum() +
   custom_theme +
-  labs(x = "Interval Start Date", y = "Users", title = "Most Often Coin Showing Choice in 2-week Intervals", legend = "Mode show_coins")
+  labs(x = "Interval Start Date", y = "Users", title = "Coin Showing Choice Mode Change in 2-week Intervals", fill = "Mode show_coins")
 
 coins_sankey
 ggsave("Jan Group/Plots/Show_coins_Sankey.jpeg")
@@ -296,6 +297,13 @@ coins_plot
 ggsave("Jan Group/Plots/Coin Showing.jpeg")
 
 
+calc <- show_count %>%
+  group_by(user_id) %>%
+  mutate(total = sum(count),                         
+    prop = sum(count[show_coins == 1]) / total 
+  ) %>%
+  ungroup() 
+paste0("Of users who switched from never showing to showing ", round(sum(calc$prop >= .5) / nrow(calc) * 100, 2), "% of them stuck with showing coins most of the time.")
 ```
 
 We see that the majority of those who switched coins on, most of the time kept coins on which is a substantial change from their previous behavior.
@@ -415,9 +423,9 @@ stayers_all <- switch_tracking_all %>%
       all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Medium" ~ "Never Switched - Medium",
       all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Hard" ~ "Never Switched - Hard",
       # Did Not Stay Switched: First and last are the same but switched at some point
-      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Easy" ~ "Did Not Stay Switched - Easy",
-      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Medium" ~ "Did Not Stay Switched - Medium",
-      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Hard" ~ "Did Not Stay Switched - Hard",
+      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Easy" ~ "Didn't Stay Switched - Easy",
+      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Medium" ~ "Didn't Stay Switched - Medium",
+      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Hard" ~ "Didn't Stay Switched - Hard",
       # Stayed Switched: First and last are different
       first(first_cat) == "Easy" ~ "Stayed Switched - Easy",
       first(first_cat) == "Medium" ~ "Stayed Switched - Medium",
@@ -446,21 +454,24 @@ fgb_data <- ed_logs %>%
 collapsed_fgb <- fgb_data %>%
   group_by(user_id) %>%
   summarize(
-    extended_deadline_total = sum(extended_deadline_total, na.rm = TRUE),
-    non_response_before = sum(non_response_before, na.rm = TRUE),
-    non_response_after = sum(non_response_after, na.rm = TRUE)
+    extended_deadline = sum(extended_deadline_total, na.rm = TRUE),
+    no_answer_before = sum(non_response_before, na.rm = TRUE),
+    no_answer_after = sum(non_response_after, na.rm = TRUE)
   ) %>%
   left_join(stayers_all, by = "user_id") %>%
   filter(!is.na(stayed_switched))
 
 
 collapsed_long <- collapsed_fgb %>%
-  pivot_longer(cols = c(extended_deadline_total, non_response_before, non_response_after),
+  pivot_longer(cols = c(extended_deadline, no_answer_before, no_answer_after),
                names_to = "response_type",
                values_to = "value"
   ) %>%
   mutate(stayed_switched = factor(stayed_switched, 
-                                  levels = c("Did Not Stay Switched - Easy", "Did Not Stay Switched - Medium", "Did Not Stay Switched - Hard", "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard", "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard"))
+                                  levels = c("Didn't Stay Switched - Easy", "Didn't Stay Switched - Medium", "Didn't Stay Switched - Hard", "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard", "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard")),
+         response_type = factor(response_type,
+                                levels = c("no_answer_before", "no_answer_after", "extended_deadline"),
+                                labels = c("No Answer Before", "No Answer After", "Late Response"))
   )
 ```
 
@@ -469,9 +480,9 @@ collapsed_long <- collapsed_fgb %>%
 # All combined
 # Setting Color Scheme
 response_color <- c(
-  "extended_deadline_total" = "#E69F00",
-  "non_response_before" = "#56B4E9",
-  "non_response_after" = "#009E73"
+  "Late Response" = "#E69F00",
+  "No Answer Before" = "#00bfc4",
+  "No Answer After" = "#f8766d"
 )
 
 # Faceted bar graph
@@ -497,15 +508,8 @@ ggsave("Jan Group/Plots/Response Totals.jpeg")
 ```
 
 
-```{r}
-# Time to graph it
-# Setting Color Scheme
-response_color <- c(
-  "extended_deadline_total" = "#E69F00",
-  "non_response_before" = "#56B4E9",
-  "non_response_after" = "#009E73"
-)
 
+```{r}
 # Faceted bar graph
 fb_plot <- ggplot(collapsed_long, aes(x = response_type, y = value, fill = response_type)) +
   geom_bar(stat = "identity", position = "dodge") +
@@ -519,7 +523,7 @@ fb_plot <- ggplot(collapsed_long, aes(x = response_type, y = value, fill = respo
   custom_theme +
   facet_wrap(~ stayed_switched) +
   theme(
-    strip.text = element_text(size = 12),
+    strip.text = element_text(size = 10),
     legend.position = "bottom",
     axis.title.x = element_blank(),
     axis.text.x = element_blank()
@@ -625,7 +629,7 @@ afk_sq_plot <- motivation_data %>%
   geom_text(
     aes(label = count, group = change),
     position = position_dodge(width = 0.9),
-    vjust = -0.5
+    vjust = 1.5
   ) +
   scale_fill_manual(values = before_after_color) +
   scale_y_continuous(labels = label_percent(scale = 1)) + # Format y-axis as percentages
@@ -651,7 +655,7 @@ soft_complete_color <- c("completed_session" = "#00bfc4",
                   "soft_quitting" = "#f8766d")
 
 # Plotting percent of hard quits after soft-quit vs completed session
-pie <- motivation_data %>%
+pie_data <- motivation_data %>%
   filter(hard_quit == TRUE) %>%
   group_by(change) %>%
   summarise(
@@ -672,7 +676,9 @@ pie <- motivation_data %>%
     values_to = "count",
     names_transform = list(quit_type_count = ~ gsub("_count", "", .x))  # Clean names
   ) %>%
-  filter(quit_type == quit_type_count) %>%  # Match percentage and counts
+  filter(quit_type == quit_type_count) # Match percentage and counts
+
+pie <- pie_data %>%  
   ggplot(aes(x = "", y = value, fill = quit_type)) +
   geom_bar(stat = "identity", width = 1) +
   coord_polar(theta = "y") +  # Convert to pie chart
