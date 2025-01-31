@@ -1187,4 +1187,30 @@ print(correct_plot)
 grid.arrange(no_answer_plot, late, correct_plot, ncol = 3)
 
 
+# Calculate the total number of unique items (item_id) played before and after the new UI (1 vs 0) per domain
+result_items_played <- data %>%
+  group_by(domain_id, new_UI) %>%
+  summarise(
+    total_items_played = n()  # Count distinct item_id (unique items played)
+  )
+
+# Add the domain names to the result
+result_items_played$domain_name <- domain_names[as.character(result_items_played$domain_id)]
+
+# Plot the result using ggplot
+items_played_plot <- ggplot(result_items_played, aes(x = domain_name, y = total_items_played, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#00BFC4", "#F8766D")) +  # Custom colors for new_UI 0 and 1
+  labs(
+    title = "Total Items Played per Domain",
+    x = " ",
+    y = "TotalItems Played",
+    fill = "Update on Oct 25th"
+  ) +
+  custom_theme  # You can replace with your custom theme if needed
+
+# Display the plot
+print(items_played_plot)
+
+
 oefenwebDatabase::close_connection(con)
