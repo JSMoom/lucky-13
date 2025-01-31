@@ -180,7 +180,7 @@ latest_date <- max(ed_logs$date, na.rm = TRUE)
 print(paste("Earliest date:", earliest_date))
 print(paste("Latest date:", latest_date))
 
-## ----------------------------------------------------------------------------
+## ----------------------------------------------------------------------------  HI JESSEE!!! IT'S HERE! :D
 ## Data Preparation
 data <- ed_logs %>%
   mutate(grade = as.numeric(as.character(grade))) %>%  # Convert grade from factor to numeric
