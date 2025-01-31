@@ -265,7 +265,7 @@ plot1 <- data %>%
   geom_errorbar(aes(xmin = no_answer_percentage - sd, xmax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer by Domain", y = "Domain", x = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "   By Domain", y = "Domain", x = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -281,7 +281,7 @@ plot2 <- data %>%
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer by Grade", x = "Grade", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "   By Grade", x = "Grade", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -307,7 +307,7 @@ plot3 <- data %>%
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "   By Mode Difficulty", x = "Mode Difficulty", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -323,7 +323,7 @@ plot4 <- data %>%
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "      For Learning Goal Sessions", x = "Learning Goal Session", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -342,7 +342,7 @@ plot1 <- data %>%
   ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer by Domain", y = "Domain", x = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "   By Domain", y = "Domain", x = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -356,7 +356,7 @@ plot2 <- data %>%
   ggplot(aes(x = factor(grade), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer by Grade", x = "Grade", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "   By Grade", x = "Grade", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -380,7 +380,7 @@ plot3 <- data %>%
   ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "   By Mode Difficulty", x = "Mode Difficulty", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -394,7 +394,7 @@ plot4 <- data %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of No Answer for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of No Answer", fill = "Update on Oct 25th") +
+  labs(title = "      For Learning Goal Sessions", x = "Learning Goal Session", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -474,7 +474,7 @@ plot1 <- data %>%
   geom_errorbar(aes(xmin = help_percentage - sd, xmax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help by Domain", y = "Domain", x = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "  By Domain", y = "Domain", x = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -490,7 +490,7 @@ plot2 <- data %>%
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help by Grade", x = "Grade", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "  By Grade", x = "Grade", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -516,7 +516,7 @@ plot3 <- data %>%
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "  By Mode Difficulty", x = "Mode Difficulty", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -532,7 +532,7 @@ plot4 <- data %>%
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
                 width = 0.2, position = position_dodge(0.9)) +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "     For Learning Goal Sessions", x = "Learning Goal Session", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -550,7 +550,7 @@ plot1 <- data %>%
   ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help by Domain", y = "Domain", x = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "  By Domain", y = "Domain", x = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -564,7 +564,7 @@ plot2 <- data %>%
   ggplot(aes(x = factor(grade), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help by Grade", x = "Grade", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "  By Grade", x = "Grade", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -588,7 +588,7 @@ plot3 <- data %>%
   ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help by Mode Difficulty", x = "Mode Difficulty", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "  By Mode Difficulty", x = "Mode Difficulty", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -602,7 +602,7 @@ plot4 <- data %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = custom_colors) +  # Apply consistent colors
-  labs(title = "Percentage of Help for Learning Goal Sessions", x = "Learning Goal Session", y = "Percentage of Help", fill = "Update on Oct 25th") +
+  labs(title = "     For Learning Goal Sessions", x = "Learning Goal Session", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -684,7 +684,7 @@ correct_answers_domain <- data %>%
 plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Domain", x = "Percentage of Correct Answers", y = "Domain", fill = "Update on Oct 25th") +
+  labs(title = "    By Domain", x = "   ", y = "Domain", fill = "Update on Oct 25th") +
   custom_theme
 
 correct_answers_grade <- data %>%
@@ -700,7 +700,7 @@ correct_answers_grade <- data %>%
 plot2 <- ggplot(correct_answers_grade, aes(x = factor(grade), y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Grade", x = "Grade", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  labs(title = "    By Grade", x = "Grade", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -727,7 +727,7 @@ correct_answers_difficulty <- data %>%
 plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Difficulty", x = "Difficulty", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  labs(title = "    By Difficulty", x = "Difficulty", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
 correct_answers_learning <- data %>%
@@ -746,7 +746,7 @@ correct_answers_learning <- data %>%
 plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Learning Goal", x = "Learning Goal", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  labs(title = "    By Learning Goal", x = "Learning Goal", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
 grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
@@ -773,7 +773,7 @@ plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_n
   geom_errorbar(aes(xmin = correct_percentage - sd, xmax = correct_percentage + sd), 
                 width = 0.2, position = position_dodge(0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Domain", x = "Percentage of Correct Answers", y = "Domain", fill = "Update on Oct 25th") +
+  labs(title = "    By Domain", x = "   ", y = "Domain", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -793,7 +793,7 @@ plot2 <- ggplot(correct_answers_grade, aes(x = factor(grade), y = correct_percen
   geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
                 width = 0.2, position = position_dodge(0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Grade", x = "Grade", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  labs(title = "    By Grade", x = "Grade", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -823,7 +823,7 @@ plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_perc
   geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
                 width = 0.2, position = position_dodge(0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Difficulty", x = "Difficulty", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  labs(title = "    By Difficulty", x = "Difficulty", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
 
@@ -846,7 +846,7 @@ plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_perc
   geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
                 width = 0.2, position = position_dodge(0.8)) +
   scale_fill_manual(values = custom_colors) +  
-  labs(title = "Percentage of Correct Answers by Learning Goal", x = "Learning Goal", y = "Percentage of Correct Answers", fill = "Update on Oct 25th") +
+  labs(title = "    By Learning Goal", x = "Learning Goal", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
 grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
@@ -1110,5 +1110,81 @@ responses_by_weekday <- filtered_data %>%
     late_response_rate = round(mean(late_response) * 100, 2),
     .groups = "drop"
   )
+
+##------------------------------------------------------------------------------
+# Filter data for domain = 59
+data_domain_59 <- data %>% filter(domain_id == 59)
+
+# Calculate the percentage of late_responses that are not no_responses per deadline compared to total responses
+result <- data_domain_59 %>%
+  group_by(deadline) %>%
+  summarise(
+    total_responses = n(),  # Total number of responses
+    total_late_responses = sum(late_response == TRUE),  # Total late responses
+    non_no_responses = sum(late_response == TRUE & no_answer == FALSE),  # Late but not no responses
+    percentage_non_no_responses = (non_no_responses / total_responses) * 100  # Percentage compared to total responses
+  )
+
+# Plot the result using ggplot
+late<- ggplot(result, aes(x = as.factor(deadline), y = percentage_non_no_responses)) +
+  geom_bar(stat = "identity", fill = "#fe6c66") +
+  labs(
+    title = "Late Responses per Deadline",
+    x = "Deadline",
+    y = "Percentage (%)"
+  ) +
+  custom_theme
+
+# Calculate the percentage of no_answer responses before new_UI (1 vs 0) per deadline
+result_no_answer <- data_domain_59 %>%
+  group_by(deadline, new_UI) %>%
+  summarise(
+    total_responses = n(),  # Total number of responses
+    total_no_answer = sum(no_answer == TRUE),  # Total no_answer responses
+    percentage_no_answer = (total_no_answer / total_responses) * 100  # Percentage of no_answer
+  )
+
+# Plot the result using ggplot
+no_answer_plot <- ggplot(result_no_answer, aes(x = as.factor(deadline), y = percentage_no_answer, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#00BFC4", "#fe6c66")) +  # Custom colors for new_UI 0 and 1
+  labs(
+    title = "No Answer per Deadline",
+    x = "Deadline",
+    y = "Percentage (%)",
+    fill = "Update on Oc 25th "
+  ) +
+  custom_theme  # You can replace with your custom theme if needed
+
+# Display the plot
+print(no_answer_plot)
+
+# Calculate the percentage of correct responses before and after the new UI (1 vs 0) per deadline
+correct_answered <- data_domain_59 %>%
+  group_by(deadline, new_UI) %>%
+  summarise(
+    total_responses = n(),  # Total number of responses
+    total_correct = sum(correct_answered == 1),  # Total correct responses
+    percentage_correct = (total_correct / total_responses) * 100  # Percentage of correct responses
+  )
+
+# Plot the result using ggplot
+correct_plot <- ggplot(correct_answered, aes(x = as.factor(deadline), y = percentage_correct, fill = as.factor(new_UI))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#00BFC4", "#fe6c66")) +  # Custom colors for new_UI 0 and 1
+  labs(
+    title = "Correct Responses per Deadline",
+    x = "Deadline",
+    y = "Percentage (%)",
+    fill = "Update on Oct 25th"
+  ) +
+  custom_theme  # You can replace with your custom theme if needed
+
+# print plot
+print(correct_plot)
+
+# Combine all plots into a grid
+grid.arrange(no_answer_plot, late, correct_plot, ncol = 3)
+
 
 oefenwebDatabase::close_connection(con)
