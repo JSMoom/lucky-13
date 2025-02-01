@@ -69,7 +69,6 @@ Ender: analyzing growth slopes in the first 2 months of 2024 (Sep-Oct 25) to gro
 
 ```{r}
 ### Checking amount of items played in the two periods, per domain ###
-
 items_played <- ed_logs %>%
   mutate(period = case_when(
     date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
@@ -80,17 +79,21 @@ items_played <- ed_logs %>%
   filter(period != "other") %>%
   arrange(domain_id, desc(period))
 
+items_played$period <- factor(items_played$period, levels = c("Sep-Oct", "Oct-Dec"))
+
 items_played %>%
   ggplot(aes(x = domain_id, y = items_played, fill = period)) +
   geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(title = "Items Played by Domain and Period", x = "Domain", y = "Items Played")
+  labs(title = "Items Played by Domain and Period", x = "Domain", y = "Items Played") +
+  scale_fill_manual(values = c("Sep-Oct" = "#57b0b5", "Oct-Dec"= "#fe6c66")) +
+  custom_theme
 ```
 
-Data structuring for multilevel analysis
+Having similar (and sufficient) amounts of items played in the two periods across domains, we can proceed with data preparation for a multilevel analysis that investigates growth, taking into account domains, grades, usage of extended deadline
+
 
 ```{r}
-# Create period variable
+### Structuring data for multilevel analysis
 period_logs <- ed_logs %>%
   mutate(period = case_when(
     date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
@@ -99,19 +102,49 @@ period_logs <- ed_logs %>%
   filter(period != "other") %>%
   filter(!is.na(new_user_domain_q_score))
 
-# Structure data to have a Q-score for every session entry
+# Record answers as either being in the extended deadline time or not
+period_logs <- period_logs %>%
+  mutate(late_response = ifelse(response_in_seconds > deadline & answer != "…", 1, 0))
+```
+
+```{r}
+# Structure data to have a Q-score for every session entry, prepare other variables
+
+# Categorize users that never used, or used extended deadline above or below mean (per domain)
+ext_deadline_usage <- period_logs %>%
+  group_by(user_id, period, domain_id) %>%
+  summarize(
+    usage_extended_deadline = mean(late_response),
+    never_used_deadline = all(late_response == 0), 
+    .groups = "drop") %>%
+  ungroup() %>%
+  # Calculate the mean usage for each domain (taking into account the period)
+  group_by(period, domain_id) %>%
+  mutate(
+    domain_avg_extended_deadline = mean(usage_extended_deadline[!never_used_deadline])
+  ) %>%
+  ungroup() %>%
+  # Classify users based on domain-specific average
+  mutate(
+    extended_deadline_group = case_when(
+      never_used_deadline ~ "Never",
+      usage_extended_deadline > domain_avg_extended_deadline ~ "Above average",
+      TRUE ~ "Below average"))
+
+# Compute Q_score at the end of the session, and usage of extended deadline
 multilevel_data <- period_logs %>%
   arrange(user_id, period, domain_id, new_user_domain_session_count, new_user_domain_modified_count) %>%
   group_by(user_id, period, domain_id, new_user_domain_session_count) %>%
-  summarize(q_score = last(new_user_domain_q_score), .groups = "drop") %>%
+  # calculate q_score at the end of the session
+  summarize(q_score = last(new_user_domain_q_score),
+            ext_deadline_usage = mean(late_response), .groups = "drop") %>%
   # need to re-attach grade & difficulty to data
   left_join(period_logs %>%
               select(user_id, period, grade, domain_id, difficulty, new_user_domain_session_count,
                      new_user_domain_modified_count),
             by = c("user_id", "period", "domain_id", "new_user_domain_session_count"))
 
-
-# Re-number sessions to start from 1 (for each period separately)
+# Re-number sessions to start from 1 (separate for each period, domain, and user combination)
 multilevel_data_unique <- multilevel_data %>%
   distinct(user_id, period, domain_id, new_user_domain_session_count, .keep_all = TRUE) %>%
   group_by(user_id, period, domain_id) %>%
@@ -119,226 +152,568 @@ multilevel_data_unique <- multilevel_data %>%
   ungroup() %>%
   select(-new_user_domain_modified_count, -new_user_domain_session_count)
 
-# Check observation nr per grade, domain
+# Add variable describing category of user (never used, above or below average use of extended deadline)
+multilevel_data_unique <- multilevel_data_unique %>%
+  left_join(
+    ext_deadline_usage %>% 
+      select(user_id, period, domain_id, extended_deadline_group),
+    by = c("user_id", "period", "domain_id")) %>%
+  mutate(extended_deadline_group = relevel(factor(extended_deadline_group), ref = "Never"))
+
+# Check observation numbers per grade, domain
+print("Number of sessions for each grade")
 table(multilevel_data_unique$grade)
+print("Number of sessions for each domain")
 table(multilevel_data_unique$domain_id)
 
-# Remove data for grades 1, 2, and 9-19
+# Remove data for grades 1, 2, and 9-19, as there is too little data there
 multilevel_data_unique$grade <- as.integer(multilevel_data_unique$grade)
 multilevel_data_unique <- multilevel_data_unique %>%
   filter(!(grade == 1) & !(grade == 2) & !(grade >= 9 & grade <= 19))
 
+# Set variables as factors
 multilevel_data_unique$difficulty <- as.factor(multilevel_data_unique$difficulty)
 multilevel_data_unique$period <- as.factor(multilevel_data_unique$period)
 multilevel_data_unique$domain_id <- as.factor(multilevel_data_unique$domain_id)
 multilevel_data_unique$grade <- as.factor(multilevel_data_unique$grade)
+multilevel_data_unique$extended_deadline_group <- as.factor(multilevel_data_unique$extended_deadline_group)
 
-# Remove sessions over 20
+# Remove sessions over 20; analysis will be done on growth across 20 sessions,
+# since there is little data for users that played more than that, and it is noisy
 multilevel_data_unique <- multilevel_data_unique %>%
   filter(session <= 20)
 
-# Scale session & q_score
+# Scale session, q_score; this fixes convergence issues in the models
+# analysis results are the same with q_score scaled per domain, or across all domains
+# here we scale it across all domains
 multilevel_data_unique <- multilevel_data_unique %>%
   mutate(session_scaled = scale(session)) %>%
-  group_by(domain_id) %>%
   mutate(q_score_scaled = scale(q_score)) %>%
   ungroup()
+
+# Extract scaling parameters; will be necessary for plots
+session_mean <- attr(scale(multilevel_data_unique$session), "scaled:center")
+session_sd <- attr(scale(multilevel_data_unique$session), "scaled:scale")
+q_score_mean <- attr(scale(multilevel_data_unique$q_score), "scaled:center")
+q_score_sd <- attr(scale(multilevel_data_unique$q_score), "scaled:scale")
+
+# For the analyses we will use multilevel_data_unique as the main data-set
+```
+
+```{r}
+### T-test to check whether q_score penalty is the same, given that an answer was correct VS incorrect in the extended deadline ###
+t_test_data <- period_logs[period_logs$period == "Oct-Dec",] %>%
+  group_by(user_id, domain_id) %>%
+  mutate(q_score_diff = new_user_domain_q_score - lag(new_user_domain_q_score)) %>%
+  mutate(q_score_diff = replace(q_score_diff, is.na(q_score_diff), 0)) %>%  # replace NA with 0
+  ungroup()
+
+# group 0 = used extended deadline, responded incorrect
+# group 1 = used extended deadline, responded correct
+group_0 <- experiment$q_score_diff[experiment$late_response == 1 & experiment$correct_answered == 0]
+group_1 <- experiment$q_score_diff[experiment$late_response == 1 & experiment$correct_answered == 1]
+
+# T-test: do players lose the same amount of q_score if they answered correctly VS incorrectly in the extended deadline?
+t_test_result <- t.test(group_0, group_1)
+print(t_test_result)
+
+# Answer: players lose about 2 more q_score points if they answer incorrectly
 ```
 
 ```{r}
 ### Multilevel Analyses ###
-# Models were tested sequentially; intervention_2 fits best
+# Models were tested sequentially; intervention_final fits best
 fixed_slopes <- lmer(
-  q_score_scaled ~ 1 + session_scaled + (1 | user_id),
-  REML = F, data = multilevel_data_unique
-)
+  q_score_scaled ~ 1 + session_scaled +
+    (1 | user_id),
+  REML = F, data = multilevel_data_unique)
 
 random_slopes <- lmer(
-  q_score_scaled ~ 1 + session_scaled + (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique
-)
+  q_score_scaled ~ 1 + session_scaled +
+    (1 + session_scaled | user_id),
+  REML = F, data = multilevel_data_unique)
 
 domain <- lmer(
-  q_score_scaled ~ 1 + session_scaled + domain_id + (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique
-) # better fit than with session:domain_id
+  q_score_scaled ~ 1 + session_scaled +
+    domain_id +
+    (1 + session_scaled | user_id),
+  REML = F, data = multilevel_data_unique)
 
 grade <- lmer(
-  q_score_scaled ~ 1 + session_scaled + domain_id + grade + (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique
-) # does not converge with session:grade
+  q_score_scaled ~ 1 + session_scaled +
+    domain_id +
+    grade +
+    (1 + session_scaled | user_id),
+  REML = F, data = multilevel_data_unique)
+# does not converge with session:grade
 
 difficulty <- lmer(
-  q_score_scaled ~ 1 + session_scaled:difficulty + domain_id + grade + (1 + session_scaled | user_id),
-  control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique
-) # does not work with session*difficulty
+  q_score_scaled ~ 1 + session_scaled:difficulty +
+    domain_id +
+    grade +
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)), # increase iterations to achieve convergence
+  data = multilevel_data_unique)
+# does not converge with main effect of difficulty
+# this is because changes in difficulty do not reset session counter
 
 diff_domain_grade <- lmer(
-  q_score_scaled ~ 1 + session_scaled:difficulty + domain_id + grade + session_scaled:domain_id + session_scaled:grade + 
+  q_score_scaled ~ 1 + session_scaled:difficulty +
+    domain_id +
+    grade +
+    session_scaled:domain_id +
+    session_scaled:grade +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique
-) # best to include main effects
+  data = multilevel_data_unique)
+# best to include grade & domain main effects, but also growth interactions
 
 intervention_1 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period + session_scaled:difficulty + domain_id + grade + 
-    session_scaled:domain_id + session_scaled:grade + (1 + session_scaled | user_id),
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    domain_id +
+    grade +
+    session_scaled:domain_id +
+    session_scaled:grade +
+    (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique
-)
+  data = multilevel_data_unique)
+# added intervention term (period)
 
 intervention_2 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period + session_scaled:difficulty + domain_id + grade + 
-    session_scaled:domain_id:period + session_scaled:grade:period + (1 + session_scaled | user_id),
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    domain_id +
+    grade +
+    session_scaled:domain_id:period +
+    session_scaled:grade:period +
+    (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique
-)
+  data = multilevel_data_unique)
+# added interactions between domains & grades with the period
+# this is to account for different slopes between grades and domains, when comparing periods
+# fit is good
 
-summary(intervention_2)
-anova(intervention_1, intervention_2)
+intervention_3 <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    session_scaled:period:ext_deadline_usage +
+    domain_id +
+    grade +
+    session_scaled:domain_id:period +
+    session_scaled:grade:period +
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique)
+# does not converge;
+# adding growth interaction between user-specific usage of extended deadline & period adds these issues
+  
+intervention_4 <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    period:extended_deadline_group +
+    domain_id +
+    grade + 
+    session_scaled:domain_id:period +
+    session_scaled:grade:period +
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique)
+# does converge
+# categorizing individuals based on extended deadline usage improves model
 
-# Best model is intervention_2; results are basically the same with intervention_1
+intervention_5 <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    session_scaled:period:ext_deadline_usage +
+    period:extended_deadline_group +
+    domain_id +
+    grade +
+    session_scaled:domain_id:period +
+    session_scaled:grade:period +
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique)
+# does converge
+# for some reason, adding both user-specific usage of extended deadline and group categories
+# improves the model; however, BIC indicates over-parametrization
+
+intervention_6 <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    session_scaled:period:ext_deadline_usage +
+    period:grade:extended_deadline_group +
+    domain_id +
+    grade + 
+    session_scaled:domain_id:period +
+    session_scaled:grade:period +
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique)
+# does not converge
+# adding interaction between grade & extended deadline usage groups leads to issues
+# however, removing user-specific usage of extended deadline (the next model) solves this
+
+intervention_final <- lmer(
+  q_score_scaled ~ 1 + session_scaled*period +
+    session_scaled:difficulty +
+    period:grade:extended_deadline_group +
+    domain_id +
+    grade +
+    session_scaled:domain_id:period +
+    session_scaled:grade:period +
+    (1 + session_scaled | user_id),
+  control = lmerControl(optCtrl = list(maxfun = 10000)),
+  data = multilevel_data_unique)
+# does converge; BIC improvement
+# best model thus far
+
+summary(intervention_5)
+summary(intervention_final) 
+anova(intervention_5, intervention_final)
+
+# Predictions will be made using intervention_final
 # Results show that the slope of growth is larger in the period Oct-Dec
+# Improvement is most obvious in lower grades, and in domains 7, 9, 10, 11
+# Using domain_rating instead of q_score leads to the same results
+
+# Results from intervention_5 are interesting:
+# usage of the extended deadline appears to negatively affect q_score
+# however, users who use it rarely seem to benefit most from it, showing higher q_scores
+# whereas those who use it more often show lower q_scores
+
+# This could simply result from the fact that players who need and use the extended deadline
+# are more likely to have less ability than those who do not
 ```
 
 ```{r}
-# Plotting slopes for different periods (across domains, grades, difficulties)
+### Preparation for plots & predictions ###
 
-# Create a grid for prediction
-prediction_grid <- expand.grid(
-  session_scaled = seq(min(multilevel_data_unique$session_scaled), max(multilevel_data_unique$session_scaled), length.out = 20),
+# Custom theme to share across all plots
+custom_theme <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 10))
+
+# Create a data-frame for SMOOTH (linear) prediction plots (difficulty = 2)
+prediction_smooth <- expand.grid(
+  session_scaled = seq(min(multilevel_data_unique$session_scaled),
+                       max(multilevel_data_unique$session_scaled), length.out = 20),
   period = unique(multilevel_data_unique$period),
   grade = unique(multilevel_data_unique$grade),
   domain_id = unique(multilevel_data_unique$domain_id),
   difficulty = unique(multilevel_data_unique$difficulty),
+  extended_deadline_group = unique(multilevel_data_unique$extended_deadline_group),
   user_id = "dummy_user")
   # necessary to include dummy user id, as it's needed for predict() algorithm
   # however, specific user random effects won't be used in making predictions
   # as allow.new.levels = TRUE allows predictions based on fixed effects only
 
+# Set all obs in Sep-Oct to have extended_deadline_group set to "Never"
+prediction_smooth <- prediction_smooth %>%
+  mutate(extended_deadline_group = ifelse(period == "Sep-Oct", "Never", as.character(extended_deadline_group)))
+prediction_smooth$extended_deadline_group <- factor(prediction_smooth$extended_deadline_group, levels = levels(multilevel_data_unique$extended_deadline_group))
+
 # Add predictions to the grid
-prediction_grid$predicted_q_score <- predict(intervention_2, newdata = prediction_grid, allow.new.levels = TRUE)
+prediction_smooth$predicted_q_score_scaled <- predict(intervention_final,
+                                                      newdata = prediction_smooth,
+                                                      allow.new.levels = TRUE)
 
+# De-scale session & q_score for plots
+prediction_smooth <- prediction_smooth %>%
+  mutate(
+    session = session_scaled * session_sd + session_mean,
+    predicted_q_score = predicted_q_score_scaled * q_score_sd + q_score_mean
+  ) %>%
+  select(-predicted_q_score_scaled, -session_scaled)
+
+
+# Create data-frame for RAW prediction plots
+prediction_raw <- multilevel_data_unique
+prediction_raw <- prediction_raw %>%
+   mutate(predicted_q_score_scaled = predict(intervention_final, newdata = prediction_raw))
+
+# De-scale session & q_score for plots
+prediction_raw <- prediction_raw %>%
+  mutate(
+    session = session_scaled * session_sd + session_mean,
+    predicted_q_score = predicted_q_score_scaled * q_score_sd + q_score_mean
+  ) %>%
+  select(-predicted_q_score_scaled)
+```
+
+```{r}
+### Plotting slopes for different periods (across domains, grades, difficulties) ###
+
+## SMOOTH PLOT ##
 # Aggregate over all other unnecessary variables (for this plot)
-prediction_summary <- prediction_grid %>%
-  group_by(session_scaled, period) %>%
-  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_smooth <- prediction_smooth %>%
+  group_by(session, period) %>%
+  summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
+                                           levels = c("Sep-Oct", "Oct-Dec"))
 
-
-### Main plot - Difference in Ability Growth Between the 2 Periods ###
-ggplot(prediction_summary, aes(x = session_scaled, y = predicted_q_score, color = period)) +
+### SMOOTH - Difference in Ability Growth Between the 2 Periods ###
+ggplot(prediction_summary_smooth, aes(x = session, y = mean_predicted_q_score, color = period)) +
   geom_line(aes(group = period), size = 1.2) +
   theme_minimal() +
   labs(
-    title = "Difference in Growth Slope Over 20 Sessions: Sep-Oct VS Oct-Dec",
+    title = "Smooth Model Predictions",
     x = "Session",
     y = "Predicted Q-Score",
     color = "Period"
   ) +
-  scale_color_manual(values = c("blue", "red")) +
-  theme(legend.position = "top")
+  custom_theme +
+  scale_color_manual(values = c("#57b0b5", "#fe6c66"))
+
+## RAW PLOT ##
+prediction_summary_raw <- prediction_raw %>%
+  group_by(session, period) %>%
+  summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_raw$period <- factor(prediction_summary_raw$period,
+                                        levels = c("Sep-Oct", "Oct-Dec"))
+
+ggplot(prediction_summary_raw, aes(x = session, y = mean_predicted_q_score, color = period)) +
+  geom_line(aes(group = period), size = 1.2) +
+  theme_minimal() +
+  labs(
+    title = "Raw Predictions",
+    x = "Session",
+    y = "Predicted Q-Score",
+    color = "Period"
+  ) +
+  custom_theme +
+  scale_color_manual(values = c("#57b0b5", "#fe6c66"))
+
+
+## Observed (actual) data plot ##
+prediction_summary_obs <- prediction_raw %>%
+  group_by(session, period) %>%
+  summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
+prediction_summary_obs$period <- factor(prediction_summary_obs$period,
+                                        levels = c("Sep-Oct", "Oct-Dec"))
+
+ggplot(prediction_summary_obs, aes(x = session, y = mean_observed_q_score, color = period)) +
+  geom_line(aes(group = period), size = 1.2) +
+  theme_minimal() +
+  labs(
+    title = "Actual Data",
+    x = "Session",
+    y = "Observed Q-Score",
+    color = "Period"
+  ) +
+  custom_theme +
+  scale_color_manual(values = c("#57b0b5", "#fe6c66"))
 ```
 
+
 ```{r}
-# Plots for different domains
+### Plots of growth for different domains ###
 domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
 
-prediction_summary <- prediction_grid %>%
-  group_by(period, domain_id, session_scaled) %>%
-  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+## SMOOTH PLOT ##
+# Aggregate over all other unnecessary variables
+prediction_summary_smooth <- prediction_smooth %>%
+  group_by(period, domain_id, session) %>%
+  summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
+                                           levels = c("Sep-Oct", "Oct-Dec"))
+
+### SMOOTH - Difference in Ability Growth Between the 2 Periods, for all Domains ###
+for (i in domains){
+  p <- ggplot(prediction_summary_smooth[prediction_summary_smooth$domain_id == i,],
+              aes(x = session, y = mean_predicted_q_score, color = period)) +
+    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
+    theme_minimal() +
+    labs(
+      title = paste("Smooth Predicted Session and Q-Score by Period, Domain", i),
+      x = "Session",
+      y = "Predicted Q-Score",
+      color = "Period"
+    ) +
+    scale_color_manual(values = c("#57b0b5", "#fe6c66")) +
+    custom_theme
+  print(p)
+}
+
+## RAW PLOT ##
+prediction_summary_raw <- prediction_raw %>%
+  group_by(period, domain_id, session) %>%
+  summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_raw$period <- factor(prediction_summary_raw$period, levels = c("Sep-Oct", "Oct-Dec"))
 
 for (i in domains){
-  p <- ggplot(prediction_summary[prediction_summary$domain_id == i,], aes(x = session_scaled, y = predicted_q_score, color = period))+
+  p <- ggplot(prediction_summary_raw[prediction_summary_raw$domain_id == i,],
+              aes(x = session, y = mean_predicted_q_score, color = period)) +
     geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
     theme_minimal() +
     labs(
-      title = paste("Relationship between Session and Q-Score by Period, Domain", i),
+      title = paste("Raw Predicted Session and Q-Score by Period, Domain", i),
       x = "Session",
-      y = "Q-Score",
+      y = "Predicted Q-Score",
       color = "Period"
     ) +
-    scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
-    theme(legend.position = "top")
+    scale_color_manual(values = c("#57b0b5", "#fe6c66")) +
+    custom_theme
+  print(p)
+}
+
+
+## OBSERVED PLOT ##
+prediction_summary_obs <- prediction_raw %>%
+  group_by(period, domain_id, session) %>%
+  summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
+prediction_summary_obs$period <- factor(prediction_summary_obs$period,
+                                        levels = c("Sep-Oct", "Oct-Dec"))
+
+for (i in domains){
+  p <- ggplot(prediction_summary_obs[prediction_summary_obs$domain_id == i,],
+              aes(x = session, y = mean_observed_q_score, color = period)) +
+    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
+    theme_minimal() +
+    labs(
+      title = paste("Observed Session and Q-Score by Period, Domain", i),
+      x = "Session",
+      y = "Observed Q-Score",
+      color = "Period"
+    ) +
+    scale_color_manual(values = c("#57b0b5", "#fe6c66")) +
+    custom_theme
   print(p)
 }
 ```
 
 ```{r}
-# Plots for different grades
+### Difference in Ability Growth Between the 2 Periods, for all Grades ###
 grades <- c(3, 4, 5, 6, 7, 8)
 
-prediction_summary <- prediction_grid %>%
-  group_by(period, grade, session_scaled) %>%
-  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+## SMOOTH PLOT ##
+# Aggregate over all other unnecessary variables
+prediction_summary_smooth <- prediction_smooth %>%
+  group_by(period, grade, session) %>%
+  summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
+                                           levels = c("Sep-Oct", "Oct-Dec"))
 
 for (i in grades){
-  p <- ggplot(prediction_summary[prediction_summary$grade == i,], aes(x = session_scaled, y = predicted_q_score, color = period)) +
-    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
+  p <- ggplot(prediction_summary_smooth[prediction_summary_smooth$grade == i,],
+              aes(x = session, y = mean_predicted_q_score, color = period)) +
+    geom_line(aes(group = period), size = 1.2) +
     theme_minimal() +
     labs(
-      title = paste("Relationship between Session and Q-Score by Period, Grade", i),
+      title = paste("Smooth Predicted Session and Q-Score by Period, Grade", i),
       x = "Session",
-      y = "Q-Score",
+      y = "Predicted Q-Score",
       color = "Period"
     ) +
-    scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
-    theme(legend.position = "top")
+    scale_color_manual(values = c("#57b0b5", "#fe6c66")) +
+    custom_theme
+  print(p)
+}
+
+## RAW PLOT ##
+prediction_summary_raw <- prediction_raw %>%
+  group_by(period, grade, session) %>%
+  summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+prediction_summary_raw$period <- factor(prediction_summary_raw$period,
+                                        levels = c("Sep-Oct", "Oct-Dec"))
+
+for (i in grades){
+  p <- ggplot(prediction_summary_raw[prediction_summary_raw$grade == i,],
+              aes(x = session, y = mean_predicted_q_score, color = period)) +
+    geom_line(aes(group = period), size = 1.2) +
+    theme_minimal() +
+    labs(
+      title = paste("Raw Predicted Session and Q-Score by Period, Grade", i),
+      x = "Session",
+      y = "Predicted Q-Score",
+      color = "Period"
+    ) +
+    scale_color_manual(values = c("#57b0b5", "#fe6c66")) +
+    custom_theme
+  print(p)
+}
+
+## OBSERVED PLOT ##
+prediction_summary_obs <- prediction_raw %>%
+  group_by(period, grade, session) %>%
+  summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
+prediction_summary_obs$period <- factor(prediction_summary_obs$period,
+                                        levels = c("Sep-Oct", "Oct-Dec"))
+
+for (i in grades){
+  p <- ggplot(prediction_summary_obs[prediction_summary_obs$grade == i,],
+              aes(x = session, y = mean_observed_q_score, color = period)) +
+    geom_line(aes(group = period), size = 1.2) +
+    theme_minimal() +
+    labs(
+      title = paste("Observed Session and Q-Score by Period, Grade", i),
+      x = "Session",
+      y = "Observed Q-Score",
+      color = "Period"
+    ) +
+    scale_color_manual(values = c("#57b0b5", "#fe6c66")) +
+    custom_theme
   print(p)
 }
 ```
 
+
 ```{r}
-# Plots for all combinations of grades and domains
-grades <- c(3, 4, 5, 6, 7, 8)
-domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
+### Plotting average q_score for different types of users that use the extended deadline ###
 
-prediction_summary <- prediction_grid %>%
-  group_by(period, domain_id, grade, session_scaled) %>%
-  summarize(predicted_q_score = mean(predicted_q_score), .groups = "drop")
+## OBSERVED DATA PLOT ##
+# results are the same when using predicted q_score values instead of observed ones
 
-for (i in grades) {
-  for (j in domains) {
-    
-    # Create the plot
-    p <- ggplot(prediction_summary[prediction_summary$grade == i & prediction_summary$domain_id == j,],
-                aes(x = session_scaled, y = predicted_q_score, color = period)) +
-      geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
-      theme_minimal() +
-      labs(
-        title = paste("Relationship between Session and Q-Score by Period, Grade", i, "Domain", j),
-        x = "Session",
-        y = "Q-Score",
-        color = "Period"
-      ) +
-      scale_color_manual(values = c("blue", "red")) +  # Customize colors for each period
-      theme(legend.position = "top")
+# Aggregate over all other unnecessary variables
+prediction_summary_raw <- prediction_raw %>%
+  filter(period == "Oct-Dec") %>%
+  group_by(extended_deadline_group) %>%
+  summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
 
-    # Print the plot
-    print(p)
-  }
-}
+ggplot(prediction_summary_raw, aes(x = extended_deadline_group, y = mean_observed_q_score, color = extended_deadline_group)) +
+  geom_point(size = 3, position = position_dodge(width = 0.5)) +  # Mean points
+  labs(
+    title = "Mean Q-Score by Extended Deadline Usage (Oct-Dec)",
+    x = "Extended Deadline Usage",
+    y = "Observed Q-score",
+    color = "Extended Deadline Usage"
+  ) +
+  custom_theme +
+  theme(legend.position = "none") +
+  scale_color_manual(values = c("#008856", "#BE0032", "#0067A5"))
 ```
 
 ```{r}
-##### WRONG #####
-# Calculating percentages of correct answers per difficulty, between periods
-difficulty_logs <- ed_logs %>%
-  mutate(period = case_when(
-    date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
-    date > "2024-10-25 23:59:59" ~ "Oct-Dec",
-    TRUE ~ "other"))
+### Average q_score for different grades & extended deadline usage groupings ###
 
-difficulty_logs$correct_answered = as.integer(difficulty_logs$correct_answered)
-difficulty_logs <- difficulty_logs %>%
-  group_by(domain_id, difficulty) %>%
-  summarize(percentage_correct = sum(correct_answered == 1) / n())
-# easiest difficulty has smallest percentage correct, followed by medium, then hard
-# the code here also includes data where the q_score is NA;
-# but results are the same, regardless of what data you choose
+## OBSERVED DATA PLOT ## 
+# results are the same when using predicted q_score values instead of observed ones
+
+# Aggregate over all other unnecessary variables
+prediction_summary_raw <- prediction_raw %>%
+  filter(period == "Oct-Dec") %>%
+  group_by(grade, extended_deadline_group) %>%
+  summarize(mean_observed_q_score = mean(q_score),
+            mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+
+prediction_summary_raw %>%
+  ggplot(aes(x = grade, y = mean_observed_q_score, color = extended_deadline_group)) +
+  geom_point(size = 1.5) +
+  labs(
+    title = "Q-Scores by Extended Deadline Usage & Grade (Oct-Dec)",
+    x = "Grade",
+    y = "Observed Q-score",
+    color = "Extended Deadline Usage"
+  ) +
+  custom_theme +
+  scale_color_manual(values = c("green", "red", "blue"))
+
 ```
+
 
 ```{r}
 oefenwebDatabase::close_connection(con)
 ```
-
