@@ -352,7 +352,7 @@ ggplot(aes(x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill =
   geom_flow(color = "darkgray") +
   geom_stratum() +
   custom_theme +
-  labs(x = "Interval Start Date", y = "Users", title = "Most Often Difficulty Chosen across 2-Week Intervals", legend = "Mode Difficulty")
+  labs(x = "Interval Start Date", y = "Users", title = "Difficulty Chosen Most Often across 2-Week Intervals", legend = "Mode Difficulty")
 
 dif_sankey
 ggsave("Jan Group/Plots/Mode Difficulty Sankey.jpeg")
@@ -436,6 +436,18 @@ stayers_all <- switch_tracking_all %>%
   ) %>%
   ungroup()
 
+# Getting total members
+stayers_all %>%
+  summarise(easy_never = sum(stayed_switched == "Never Switched - Easy"),
+            medium_never = sum(stayed_switched == "Never Switched - Medium"),
+            hard_never = sum(stayed_switched == "Never Switched - Hard"),
+            easy_didnt = sum(stayed_switched == "Didn't Stay Switched - Easy"),
+            medium_didnt = sum(stayed_switched == "Didn't Stay Switched - Medium"),
+            hard_didnt = sum(stayed_switched == "Didn't Stay Switched - Hard"),
+            easy_stayed = sum(stayed_switched == "Stayed Switched - Easy"),
+            medium_stayed = sum(stayed_switched == "Stayed Switched - Medium"),
+            hard_stayed = sum(stayed_switched == "Stayed Switched - Hard"))
+
 # Joining switch labels and ed_logs relevant stuff
 fgb_data <- ed_logs %>%
   select(user_id, difficulty, time_weeks, late_response, answer, date) %>%
@@ -448,8 +460,9 @@ fgb_data <- ed_logs %>%
             extended_deadline_total = sum(late_response == 1 & answer != "…"),
             non_response_before = sum(answer == "…" & date < change_date, na.rm = TRUE),
             non_response_after = sum(answer == "…" & date >= change_date, na.rm = TRUE),
+            total_before = sum(date < change_date, na.rm = TRUE),
+            total_after = sum(date >= change_date, na.rm = TRUE),
             .groups = "drop")
-
   
 collapsed_fgb <- fgb_data %>%
   group_by(user_id) %>%
