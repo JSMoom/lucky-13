@@ -180,7 +180,7 @@ latest_date <- max(ed_logs$date, na.rm = TRUE)
 print(paste("Earliest date:", earliest_date))
 print(paste("Latest date:", latest_date))
 
-## ----------------------------------------------------------------------------  HI JESSEE!!! IT'S HERE! :D
+## ----------------------------------------------------------------------------
 ## Data Preparation
 data <- ed_logs %>%
   mutate(grade = as.numeric(as.character(grade))) %>%  # Convert grade from factor to numeric
@@ -910,79 +910,6 @@ print(results_by_learning_goal)
 
 ## ----------------------------------------------------------------------------- basic overview :
 
-# Total items answered
-items_answered <- data %>%
-  group_by(new_UI) %>%
-  summarise(
-    total_items = n(),
-    .groups = "drop"
-  )
-t_test_items <- t.test(item_id ~ new_UI, data = data)
-
-# Average response time and significance test
-response_time <- data %>%
-  group_by(new_UI) %>%
-  summarise(
-    avg_response_time = mean(response_in_seconds, na.rm = TRUE),
-    sd_response_time = sd(response_in_seconds, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
-  )
-t_test_response_time <- t.test(response_in_seconds ~ new_UI, data = data)
-
-# Average daily unique users and significance test
-t_test_daily_users <- t.test(
-  daily_users ~ new_UI,
-  data = data %>%
-    group_by(new_UI, date) %>%
-    summarise(daily_users = n_distinct(user_id), .groups = "drop")
-)
-
-# Average daily sessions per user and significance test
-daily_sessions_per_user <- data %>%
-  group_by(new_UI, date) %>%
-  summarise(
-    total_sessions = n(),
-    unique_users = n_distinct(user_id),
-    avg_sessions_per_user = total_sessions / unique_users,
-    .groups = "drop"
-  ) %>%
-  group_by(new_UI) %>%
-  summarise(
-    avg_sessions_per_user = mean(avg_sessions_per_user, na.rm = TRUE),
-    sd_sessions_per_user = sd(avg_sessions_per_user, na.rm = TRUE),
-    n_days = n(),  # Number of days
-    .groups = "drop"
-  )
-t_test_sessions_per_user <- t.test(
-  avg_sessions_per_user ~ new_UI,
-  data = data %>%
-    group_by(new_UI, date) %>%
-    summarise(
-      total_sessions = n(),
-      unique_users = n_distinct(user_id),
-      avg_sessions_per_user = total_sessions / unique_users,
-      .groups = "drop"
-    )
-)
-
-# Combine results
-descriptives <- items_answered %>%
-  left_join(response_time, by = "new_UI") %>%
-  left_join(daily_unique_users, by = "new_UI") %>%
-  left_join(daily_sessions_per_user, by = "new_UI")
-
-# Print the final descriptive statistics
-print(descriptives)
-
-# Print t-test results
-cat("\nT-Test Results:\n")
-cat("\nResponse Time:\n")
-print(t_test_response_time)
-cat("\nDaily Unique Users:\n")
-print(t_test_daily_users)
-cat("\nDaily Sessions Per User:\n")
-print(t_test_sessions_per_user)
 
 ##------------------------------------------------------------------------------ Temporal pattern
 
@@ -1002,15 +929,39 @@ filtered_data <- data %>%
 late_response_by_hour <- filtered_data %>%
   group_by(hour) %>%
   summarize(
-    total_responses = n(),
-    late_responses = sum(late_response),
+    total_responses   = n(),
+    late_responses    = sum(late_response),
     late_response_rate = round(mean(late_response) * 100, 2),
     .groups = "drop"
   )
 
-# Plot Late Response Rate by Hour
-plot_hour <- late_response_by_hour %>%
-  ggplot(aes(x = hour, y = late_response_rate)) +
+# Late Responses by Weekday
+late_response_by_weekday <- filtered_data %>%
+  group_by(weekday = wday(date, label = TRUE, abbr = FALSE)) %>%
+  summarize(
+    total_responses   = n(),
+    late_responses    = sum(late_response),
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups = "drop"
+  )
+
+# Calculate the reference (minimum) date
+global_min <- min(filtered_data$date)
+
+# Group by the computed week number
+late_response_by_week <- filtered_data %>%
+  group_by(week_since_ui = as.integer(difftime(date, global_min, units = "weeks")) + 1) %>%
+  summarize(
+    total_responses    = n(),
+    late_responses     = sum(late_response),
+    late_response_rate = round(mean(late_response) * 100, 2),
+    .groups            = "drop"
+  )
+
+# --- Plotting ---
+
+# Plot: Late Response Rate by Hour of Day
+plot_hour <- ggplot(late_response_by_hour, aes(x = hour, y = late_response_rate)) +
   geom_line(color = "#57b0b5", size = 1.2) +
   geom_point(color = "#57b0b5", size = 3) +
   labs(
@@ -1019,11 +970,9 @@ plot_hour <- late_response_by_hour %>%
     y = "Late Response Rate (%)"
   ) +
   theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold")
-  )
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Late Responses by Weekday
+# Plot: Late Responses by Weekday
 plot_weekday <- ggplot(late_response_by_weekday, aes(x = weekday, y = late_response_rate)) +
   geom_bar(stat = "identity", fill = "#fe6c66") +
   labs(
@@ -1032,11 +981,9 @@ plot_weekday <- ggplot(late_response_by_weekday, aes(x = weekday, y = late_respo
     y = "Late Response Rate (%)"
   ) +
   theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold")
-  )
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Late Responses by Week Since New UI
+# Plot: Late Responses by Week
 plot_week <- ggplot(late_response_by_week, aes(x = week_since_ui, y = late_response_rate)) +
   geom_line(color = "#57b0b5", size = 1) +
   geom_point(color = "#57b0b5", size = 2) +
@@ -1046,11 +993,9 @@ plot_week <- ggplot(late_response_by_week, aes(x = week_since_ui, y = late_respo
     y = "Late Response Rate (%)"
   ) +
   theme_minimal() +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold")
-  )
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Combine all plots into a grid
+# Arrange the three plots into a single row grid
 grid.arrange(plot_hour, plot_weekday, plot_week, ncol = 3)
 
 
@@ -1186,7 +1131,6 @@ print(correct_plot)
 # Combine all plots into a grid
 grid.arrange(no_answer_plot, late, correct_plot, ncol = 3)
 
-
 # Calculate the total number of unique items (item_id) played before and after the new UI (1 vs 0) per domain
 result_items_played <- data %>%
   group_by(domain_id, new_UI) %>%
@@ -1211,6 +1155,5 @@ items_played_plot <- ggplot(result_items_played, aes(x = domain_name, y = total_
 
 # Display the plot
 print(items_played_plot)
-
 
 oefenwebDatabase::close_connection(con)
