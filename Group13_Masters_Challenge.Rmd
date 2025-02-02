@@ -65,12 +65,12 @@ query <- paste0("SELECT id AS item_id,
                  maximum_response_in_seconds AS deadline
                  FROM extended_deadline_items
                  WHERE domain_id = 59")
-  # Get the data and store it in the list
+# Get the data and store it in the list
 deadlines_59 <- suppressWarnings(DBI::dbGetQuery(con, query))
 
 # Convert created to date and into POSIXct format
 ed_logs <- ed_logs %>%
-  rename(date = created) 
+  rename(date = created)
 ed_logs$date <-
   as.POSIXct(ed_logs$date, format = "%Y-%m-%d %H:%M:%S")
 ```
@@ -95,23 +95,25 @@ items_20 <- deadlines_59 %>%
   pull(item_id)
 
 # Categorical columns
-cats <- colnames(ed_logs[,c(8:11, 14:15)])
+cats <- colnames(ed_logs[, c(8:11, 14:15)])
 
 # Adjustments to data
-ed_logs = ed_logs %>%
+ed_logs <- ed_logs %>%
   rename(response_in_seconds = response_in_milliseconds) %>%
-  mutate(deadline = case_when(
-    domain_id %in% c(1:4, 7, 10) ~ 20,
-    domain_id == 9 ~ 30,
-    domain_id == 11 ~ 60,
-    domain_id == 5 ~ 8,
-    domain_id == 59 & item_id %in% items_5 ~ 5,
-    domain_id == 59 & item_id %in% items_10 ~ 10,
-    domain_id == 59 & item_id %in% items_15 ~ 15,
-    domain_id == 59 & item_id %in% items_20 ~ 20),
+  mutate(
+    deadline = case_when(
+      domain_id %in% c(1:4, 7, 10) ~ 20,
+      domain_id == 9 ~ 30,
+      domain_id == 11 ~ 60,
+      domain_id == 5 ~ 8,
+      domain_id == 59 & item_id %in% items_5 ~ 5,
+      domain_id == 59 & item_id %in% items_10 ~ 10,
+      domain_id == 59 & item_id %in% items_15 ~ 15,
+      domain_id == 59 & item_id %in% items_20 ~ 20
+    ),
     response_in_seconds = response_in_seconds / 1000,
     across(all_of(cats), as.factor)
-  ) 
+  )
 # Adding time_weeks column and organizing by user_id then date
 ed_logs <- ed_logs %>%
   group_by(user_id) %>%
@@ -119,10 +121,11 @@ ed_logs <- ed_logs %>%
   mutate(time_weeks = ceiling(as.numeric(
     difftime(date, start_date, units = "weeks")
   ))) %>%
-  mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks),
-         late_response = ifelse(response_in_seconds > deadline, 1, 0)) %>%  # Ensure any negative or 0 values are set to 1
-  ungroup() 
-
+  mutate(
+    time_weeks = ifelse(time_weeks < 1, 1, time_weeks),
+    late_response = ifelse(response_in_seconds > deadline, 1, 0)
+  ) %>% # Ensure any negative or 0 values are set to 1
+  ungroup()
 ```
 
 
@@ -155,8 +158,8 @@ ed_logs_after <- ed_logs %>%
 
 ## Data Preparation
 data <- ed_logs %>%
-  mutate(grade = as.numeric(as.character(grade))) %>%  # Convert grade from factor to numeric
-  filter(grade >= 3 & grade <= 8)  # Keep only grades between 3 and 8
+  mutate(grade = as.numeric(as.character(grade))) %>% # Convert grade from factor to numeric
+  filter(grade >= 3 & grade <= 8) # Keep only grades between 3 and 8
 
 # Define the range
 start_date <- as.Date("2024-09-05")
@@ -189,8 +192,9 @@ data <- data %>%
 reference_date <- as.Date("2024-10-25")
 
 # Add the 'new_UI' column
-data$new_UI <- factor(ifelse(data$date > reference_date, "After", "Before"), 
-                      levels = c("Before", "After"))
+data$new_UI <- factor(ifelse(data$date > reference_date, "After", "Before"),
+  levels = c("Before", "After")
+)
 
 
 # Map domain IDs to domain names
@@ -218,8 +222,7 @@ custom_theme <- theme_minimal() +
     legend.text = element_text(size = 10)
   )
 
-custom_colors <- c("Before" = "#00BFC4", "After" = "#F8766D")  # Adjust colors as needed
-
+custom_colors <- c("Before" = "#00BFC4", "After" = "#F8766D") # Adjust colors as needed
 ```
 
 ## ---------------------------------------------------------------------------- No Answer - with Error bars
@@ -229,14 +232,15 @@ plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
-    sd = sd(no_answer) * 100,  
-    .groups = 'drop'
+    sd = sd(no_answer) * 100,
+    .groups = "drop"
   ) %>%
   ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(xmin = no_answer_percentage - sd, xmax = no_answer_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "   By Domain", y = "Domain", x = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -246,13 +250,14 @@ plot2 <- data %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
     sd = sd(no_answer) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(grade), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "   By Grade", x = "Grade", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -262,7 +267,7 @@ plot3 <- data %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
     sd = sd(no_answer) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     modeDifficultyLabel = factor(
@@ -277,8 +282,9 @@ plot3 <- data %>%
   ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "   By Mode Difficulty", x = "Mode Difficulty", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -288,13 +294,14 @@ plot4 <- data %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
     sd = sd(no_answer) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = no_answer_percentage - sd, ymax = no_answer_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "      For Learning Goal Sessions", x = "Learning Goal Session", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -311,12 +318,12 @@ plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
-    sd = sd(no_answer) * 100,  
-    .groups = 'drop'
+    sd = sd(no_answer) * 100,
+    .groups = "drop"
   ) %>%
   ggplot(aes(y = reorder(domain_name, no_answer_percentage), x = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "   By Domain", y = "Domain", x = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -326,11 +333,11 @@ plot2 <- data %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
     sd = sd(no_answer) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(grade), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "   By Grade", x = "Grade", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -340,7 +347,7 @@ plot3 <- data %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
     sd = sd(no_answer) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     modeDifficultyLabel = factor(
@@ -354,7 +361,7 @@ plot3 <- data %>%
   ) %>%
   ggplot(aes(x = modeDifficultyLabel, y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "   By Mode Difficulty", x = "Mode Difficulty", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -364,11 +371,11 @@ plot4 <- data %>%
   summarise(
     no_answer_percentage = mean(no_answer) * 100,
     sd = sd(no_answer) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = no_answer_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "      For Learning Goal Sessions", x = "Learning Goal Session", y = "  ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -389,17 +396,17 @@ group_summary <- data %>%
   )
 # Prepare the data
 test_data <- data %>%
-  group_by(new_UI, user_id) %>%  # Assuming individual-level responses
+  group_by(new_UI, user_id) %>% # Assuming individual-level responses
   summarise(
-    no_answer_mean = mean(no_answer, na.rm = TRUE)  # Mean no_answer per student
+    no_answer_mean = mean(no_answer, na.rm = TRUE) # Mean no_answer per student
   ) %>%
   ungroup()
 
 # Perform an independent t-test
 t_test_result <- t.test(
-  no_answer_mean ~ new_UI,  # Compare "Before" vs "After"
+  no_answer_mean ~ new_UI, # Compare "Before" vs "After"
   data = test_data,
-  var.equal = FALSE  # Use Welch's t-test (default), which is robust to unequal variances
+  var.equal = FALSE # Use Welch's t-test (default), which is robust to unequal variances
 )
 
 # Output the results
@@ -409,7 +416,7 @@ print(t_test_result)
 # Define a function to perform t-tests within subgroups
 perform_subgroup_t_test <- function(data, subgroup_var) {
   data %>%
-    group_by(!!sym(subgroup_var)) %>%  # Group by the subgroup variable
+    group_by(!!sym(subgroup_var)) %>% # Group by the subgroup variable
     summarise(
       t_test_result = list(t.test(no_answer ~ new_UI, data = cur_data(), var.equal = FALSE)),
       .groups = "drop"
@@ -446,14 +453,15 @@ plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
     help_percentage = mean(help) * 100,
-    sd = sd(help) * 100,  
-    .groups = 'drop'
+    sd = sd(help) * 100,
+    .groups = "drop"
   ) %>%
   ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(xmin = help_percentage - sd, xmax = help_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "  By Domain", y = "Domain", x = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -463,13 +471,14 @@ plot2 <- data %>%
   summarise(
     help_percentage = mean(help) * 100,
     sd = sd(help) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(grade), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "  By Grade", x = "Grade", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -479,7 +488,7 @@ plot3 <- data %>%
   summarise(
     help_percentage = mean(help) * 100,
     sd = sd(help) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     modeDifficultyLabel = factor(
@@ -494,8 +503,9 @@ plot3 <- data %>%
   ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "  By Mode Difficulty", x = "Mode Difficulty", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -505,13 +515,14 @@ plot4 <- data %>%
   summarise(
     help_percentage = mean(help) * 100,
     sd = sd(help) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
   geom_errorbar(aes(ymin = help_percentage - sd, ymax = help_percentage + sd),
-                width = 0.2, position = position_dodge(0.9)) +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+    width = 0.2, position = position_dodge(0.9)
+  ) +
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "     For Learning Goal Sessions", x = "Learning Goal Session", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -528,12 +539,12 @@ plot1 <- data %>%
   group_by(new_UI, domain_name) %>%
   summarise(
     help_percentage = mean(help) * 100,
-    sd = sd(help) * 100,  
-    .groups = 'drop'
+    sd = sd(help) * 100,
+    .groups = "drop"
   ) %>%
   ggplot(aes(y = reorder(domain_name, help_percentage), x = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "  By Domain", y = "Domain", x = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -543,11 +554,11 @@ plot2 <- data %>%
   summarise(
     help_percentage = mean(help) * 100,
     sd = sd(help) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(grade), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "  By Grade", x = "Grade", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -557,7 +568,7 @@ plot3 <- data %>%
   summarise(
     help_percentage = mean(help) * 100,
     sd = sd(help) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     modeDifficultyLabel = factor(
@@ -571,7 +582,7 @@ plot3 <- data %>%
   ) %>%
   ggplot(aes(x = modeDifficultyLabel, y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "  By Mode Difficulty", x = "Mode Difficulty", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -581,11 +592,11 @@ plot4 <- data %>%
   summarise(
     help_percentage = mean(help) * 100,
     sd = sd(help) * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   ggplot(aes(x = factor(learning_goal, labels = c("No", "Yes")), y = help_percentage, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = custom_colors) +  # Apply consistent colors
+  scale_fill_manual(values = custom_colors) + # Apply consistent colors
   labs(title = "     For Learning Goal Sessions", x = "Learning Goal Session", y = " ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -602,16 +613,16 @@ grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 help_summary <- data %>%
   group_by(new_UI) %>%
   summarise(
-    mean_help = mean(help, na.rm = TRUE),  # Average "help" usage
-    sd_help = sd(help, na.rm = TRUE),      # Standard deviation of "help" usage
-    n = n()                                # Sample size
+    mean_help = mean(help, na.rm = TRUE), # Average "help" usage
+    sd_help = sd(help, na.rm = TRUE), # Standard deviation of "help" usage
+    n = n() # Sample size
   )
 
 # Perform an independent t-test to test for differences in "help" usage
 t_test_help <- t.test(
-  help ~ new_UI,  # Test if "help" differs between "Before" and "After"
+  help ~ new_UI, # Test if "help" differs between "Before" and "After"
   data = data,
-  var.equal = FALSE  # Use Welch's t-test by default
+  var.equal = FALSE # Use Welch's t-test by default
 )
 
 # Output results
@@ -624,9 +635,9 @@ print(t_test_help)
 # Define a function to perform t-tests for subgroups
 perform_subgroup_t_test <- function(data, subgroup_var) {
   data %>%
-    group_by(!!sym(subgroup_var)) %>%  # Group by the subgroup variable
+    group_by(!!sym(subgroup_var)) %>% # Group by the subgroup variable
     summarise(
-      t_test_result = list(t.test(help ~ new_UI, data = cur_data(), var.equal = FALSE)),  # Perform t-test
+      t_test_result = list(t.test(help ~ new_UI, data = cur_data(), var.equal = FALSE)), # Perform t-test
       .groups = "drop"
     ) %>%
     mutate(
@@ -663,16 +674,16 @@ correct_answers_domain <- data %>%
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
-    UI_Status = new_UI,  # Consistent with "Before" and "After"
+    UI_Status = new_UI, # Consistent with "Before" and "After"
     domain_name = domain_names[as.character(domain_id)]
   )
 
 plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Domain", x = "   ", y = "Domain", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -682,13 +693,13 @@ correct_answers_grade <- data %>%
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(UI_Status = new_UI)
 
 plot2 <- ggplot(correct_answers_grade, aes(x = factor(grade), y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Grade", x = "Grade", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -699,7 +710,7 @@ correct_answers_difficulty <- data %>%
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     UI_Status = new_UI,
@@ -709,13 +720,13 @@ correct_answers_difficulty <- data %>%
         modeDifficulty == "1" ~ "Medium",
         modeDifficulty == "2" ~ "Hard"
       ),
-      levels = c("Easy", "Medium", "Hard")  # Set the correct order
+      levels = c("Easy", "Medium", "Hard") # Set the correct order
     )
   )
 
 plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Difficulty", x = "Difficulty", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -725,7 +736,7 @@ correct_answers_learning <- data %>%
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     UI_Status = new_UI,
@@ -734,7 +745,7 @@ correct_answers_learning <- data %>%
 
 plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Learning Goal", x = "Learning Goal", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -751,19 +762,20 @@ correct_answers_domain <- data %>%
     total_responses = n(),
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
-    sd = sd(correct_answered == "1") * 100,  # Calculate SD
-    .groups = 'drop'
+    sd = sd(correct_answered == "1") * 100, # Calculate SD
+    .groups = "drop"
   ) %>%
   mutate(
-    UI_Status = new_UI,  
+    UI_Status = new_UI,
     domain_name = domain_names[as.character(domain_id)]
   )
 
 plot1 <- ggplot(correct_answers_domain, aes(x = correct_percentage, y = domain_name, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(xmin = correct_percentage - sd, xmax = correct_percentage + sd), 
-                width = 0.2, position = position_dodge(0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  geom_errorbar(aes(xmin = correct_percentage - sd, xmax = correct_percentage + sd),
+    width = 0.2, position = position_dodge(0.8)
+  ) +
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Domain", x = "   ", y = "Domain", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -775,15 +787,16 @@ correct_answers_grade <- data %>%
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
     sd = sd(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(UI_Status = new_UI)
 
 plot2 <- ggplot(correct_answers_grade, aes(x = factor(grade), y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
-                width = 0.2, position = position_dodge(0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd),
+    width = 0.2, position = position_dodge(0.8)
+  ) +
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Grade", x = "Grade", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -795,7 +808,7 @@ correct_answers_difficulty <- data %>%
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
     sd = sd(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     UI_Status = new_UI,
@@ -811,9 +824,10 @@ correct_answers_difficulty <- data %>%
 
 plot3 <- ggplot(correct_answers_difficulty, aes(x = Difficulty, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
-                width = 0.2, position = position_dodge(0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd),
+    width = 0.2, position = position_dodge(0.8)
+  ) +
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Difficulty", x = "Difficulty", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -825,7 +839,7 @@ correct_answers_learning <- data %>%
     correct_responses = sum(correct_answered == "1"),
     correct_percentage = mean(correct_answered == "1") * 100,
     sd = sd(correct_answered == "1") * 100,
-    .groups = 'drop'
+    .groups = "drop"
   ) %>%
   mutate(
     UI_Status = new_UI,
@@ -834,9 +848,10 @@ correct_answers_learning <- data %>%
 
 plot4 <- ggplot(correct_answers_learning, aes(x = LearningGoal, y = correct_percentage, fill = UI_Status)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
-  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd), 
-                width = 0.2, position = position_dodge(0.8)) +
-  scale_fill_manual(values = custom_colors) +  
+  geom_errorbar(aes(ymin = correct_percentage - sd, ymax = correct_percentage + sd),
+    width = 0.2, position = position_dodge(0.8)
+  ) +
+  scale_fill_manual(values = custom_colors) +
   labs(title = "    By Learning Goal", x = "Learning Goal", y = "   ", fill = "Update on Oct 25th") +
   custom_theme
 
@@ -857,9 +872,9 @@ overall_t_test <- t.test(correct_answered ~ new_UI, data = data, var.equal = FAL
 overall_summary <- data %>%
   group_by(new_UI) %>%
   summarise(
-    mean_correct = mean(correct_answered, na.rm = TRUE) * 100,  # Mean in percentage
-    sd_correct = sd(correct_answered, na.rm = TRUE) * 100,      # Standard deviation in percentage
-    n = n()                                                    # Sample size
+    mean_correct = mean(correct_answered, na.rm = TRUE) * 100, # Mean in percentage
+    sd_correct = sd(correct_answered, na.rm = TRUE) * 100, # Standard deviation in percentage
+    n = n() # Sample size
   )
 
 # Print overall results
@@ -871,7 +886,7 @@ print(overall_t_test)
 # Define a function to test for significance by subgroup
 perform_significance_test <- function(data, group_var) {
   data %>%
-    group_by(!!sym(group_var)) %>%  # Group by the specified variable
+    group_by(!!sym(group_var)) %>% # Group by the specified variable
     summarise(
       t_test_result = list(t.test(correct_answered ~ new_UI, data = cur_data(), var.equal = FALSE)),
       .groups = "drop"
@@ -880,7 +895,7 @@ perform_significance_test <- function(data, group_var) {
       subgroup = !!sym(group_var),
       t_statistic = map_dbl(t_test_result, ~ .x$statistic),
       p_value = map_dbl(t_test_result, ~ .x$p.value),
-      mean_diff = map_dbl(t_test_result, ~ diff(.x$estimate) * 100),  # Mean difference in percentage
+      mean_diff = map_dbl(t_test_result, ~ diff(.x$estimate) * 100), # Mean difference in percentage
       conf_low = map_dbl(t_test_result, ~ .x$conf.int[1] * 100),
       conf_high = map_dbl(t_test_result, ~ .x$conf.int[2] * 100)
     ) %>%
@@ -949,7 +964,7 @@ daily_sessions_per_user <- data %>%
   summarise(
     avg_sessions_per_user = mean(avg_sessions_per_user, na.rm = TRUE),
     sd_sessions_per_user = sd(avg_sessions_per_user, na.rm = TRUE),
-    n_days = n(),  # Number of days
+    n_days = n(), # Number of days
     .groups = "drop"
   )
 t_test_sessions_per_user <- t.test(
@@ -992,7 +1007,7 @@ data$date <- as.POSIXct(data$date)
 
 # Add `hour` column to the data
 data <- data %>%
-  mutate(hour = hour(date))  # Extract hour from the date column
+  mutate(hour = hour(date)) # Extract hour from the date column
 
 # Filter data for "After" the new UI and exclude rows where no_answer = 1 and late_response = 1
 filtered_data <- data %>%
@@ -1126,14 +1141,14 @@ data_domain_59 <- data %>% filter(domain_id == 59)
 result <- data_domain_59 %>%
   group_by(deadline) %>%
   summarise(
-    total_responses = n(),  # Total number of responses
-    total_late_responses = sum(late_response == TRUE),  # Total late responses
-    non_no_responses = sum(late_response == TRUE & no_answer == FALSE),  # Late but not no responses
-    percentage_non_no_responses = (non_no_responses / total_responses) * 100  # Percentage compared to total responses
+    total_responses = n(), # Total number of responses
+    total_late_responses = sum(late_response == TRUE), # Total late responses
+    non_no_responses = sum(late_response == TRUE & no_answer == FALSE), # Late but not no responses
+    percentage_non_no_responses = (non_no_responses / total_responses) * 100 # Percentage compared to total responses
   )
 
 # Plot the result using ggplot
-late<- ggplot(result, aes(x = as.factor(deadline), y = percentage_non_no_responses)) +
+late <- ggplot(result, aes(x = as.factor(deadline), y = percentage_non_no_responses)) +
   geom_bar(stat = "identity", fill = "#fe6c66") +
   labs(
     title = "Late Responses per Deadline",
@@ -1146,22 +1161,22 @@ late<- ggplot(result, aes(x = as.factor(deadline), y = percentage_non_no_respons
 result_no_answer <- data_domain_59 %>%
   group_by(deadline, new_UI) %>%
   summarise(
-    total_responses = n(),  # Total number of responses
-    total_no_answer = sum(no_answer == TRUE),  # Total no_answer responses
-    percentage_no_answer = (total_no_answer / total_responses) * 100  # Percentage of no_answer
+    total_responses = n(), # Total number of responses
+    total_no_answer = sum(no_answer == TRUE), # Total no_answer responses
+    percentage_no_answer = (total_no_answer / total_responses) * 100 # Percentage of no_answer
   )
 
 # Plot the result using ggplot
 no_answer_plot <- ggplot(result_no_answer, aes(x = as.factor(deadline), y = percentage_no_answer, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = c("#00BFC4", "#fe6c66")) +  # Custom colors for new_UI 0 and 1
+  scale_fill_manual(values = c("#00BFC4", "#fe6c66")) + # Custom colors for new_UI 0 and 1
   labs(
     title = "No Answer per Deadline",
     x = "Deadline",
     y = "Percentage (%)",
     fill = "Update on Oc 25th "
   ) +
-  custom_theme  # You can replace with your custom theme if needed
+  custom_theme # You can replace with your custom theme if needed
 
 # Display the plot
 print(no_answer_plot)
@@ -1170,22 +1185,22 @@ print(no_answer_plot)
 correct_answered <- data_domain_59 %>%
   group_by(deadline, new_UI) %>%
   summarise(
-    total_responses = n(),  # Total number of responses
-    total_correct = sum(correct_answered == 1),  # Total correct responses
-    percentage_correct = (total_correct / total_responses) * 100  # Percentage of correct responses
+    total_responses = n(), # Total number of responses
+    total_correct = sum(correct_answered == 1), # Total correct responses
+    percentage_correct = (total_correct / total_responses) * 100 # Percentage of correct responses
   )
 
 # Plot the result using ggplot
 correct_plot <- ggplot(correct_answered, aes(x = as.factor(deadline), y = percentage_correct, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = c("#00BFC4", "#fe6c66")) +  # Custom colors for new_UI 0 and 1
+  scale_fill_manual(values = c("#00BFC4", "#fe6c66")) + # Custom colors for new_UI 0 and 1
   labs(
     title = "Correct Responses per Deadline",
     x = "Deadline",
     y = "Percentage (%)",
     fill = "Update on Oct 25th"
   ) +
-  custom_theme  # You can replace with your custom theme if needed
+  custom_theme # You can replace with your custom theme if needed
 
 # print plot
 print(correct_plot)
@@ -1198,7 +1213,7 @@ grid.arrange(no_answer_plot, late, correct_plot, ncol = 3)
 result_items_played <- data %>%
   group_by(domain_id, new_UI) %>%
   summarise(
-    total_items_played = n()  # Count distinct item_id (unique items played)
+    total_items_played = n() # Count distinct item_id (unique items played)
   )
 
 # Add the domain names to the result
@@ -1207,14 +1222,14 @@ result_items_played$domain_name <- domain_names[as.character(result_items_played
 # Plot the result using ggplot
 items_played_plot <- ggplot(result_items_played, aes(x = domain_name, y = total_items_played, fill = as.factor(new_UI))) +
   geom_bar(stat = "identity", position = "dodge") +
-  scale_fill_manual(values = c("#00BFC4", "#F8766D")) +  # Custom colors for new_UI 0 and 1
+  scale_fill_manual(values = c("#00BFC4", "#F8766D")) + # Custom colors for new_UI 0 and 1
   labs(
     title = "Total Items Played per Domain",
     x = " ",
     y = "TotalItems Played",
     fill = "Update on Oct 25th"
   ) +
-  custom_theme  # You can replace with your custom theme if needed
+  custom_theme # You can replace with your custom theme if needed
 
 # Display the plot
 print(items_played_plot)
@@ -1224,7 +1239,7 @@ print(items_played_plot)
 
 ```{r}
 # Percent of late responses that went past extended
-sum(ed_logs_after$answer == "…")/sum(ed_logs_after$late_response == 1) * 100 # 23.92%
+sum(ed_logs_after$answer == "…") / sum(ed_logs_after$late_response == 1) * 100 # 23.92%
 ```
 
 
@@ -1239,7 +1254,8 @@ items_played <- ed_logs %>%
   mutate(period = case_when(
     date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
     date > "2024-10-25 23:59:59" ~ "Oct-Dec",
-    TRUE ~ "other")) %>%
+    TRUE ~ "other"
+  )) %>%
   group_by(domain_id, period) %>%
   summarize(items_played = n()) %>%
   filter(period != "other") %>%
@@ -1251,7 +1267,7 @@ items_played %>%
   ggplot(aes(x = domain_id, y = items_played, fill = period)) +
   geom_bar(stat = "identity", position = "dodge") +
   labs(title = "Items Played by Domain and Period", x = "Domain", y = "Items Played") +
-  scale_fill_manual(values = c("Sep-Oct" = "#57b0b5", "Oct-Dec"= "#fe6c66")) +
+  scale_fill_manual(values = c("Sep-Oct" = "#57b0b5", "Oct-Dec" = "#fe6c66")) +
   custom_theme
 ```
 
@@ -1264,7 +1280,8 @@ period_logs <- ed_logs %>%
   mutate(period = case_when(
     date > "2024-09-01 00:00:01" & date < "2024-10-25 00:00:01" ~ "Sep-Oct",
     date > "2024-10-25 23:59:59" ~ "Oct-Dec",
-    TRUE ~ "other")) %>%
+    TRUE ~ "other"
+  )) %>%
   filter(period != "other") %>%
   filter(!is.na(new_user_domain_q_score))
 
@@ -1281,8 +1298,9 @@ ext_deadline_usage <- period_logs %>%
   group_by(user_id, period, domain_id) %>%
   summarize(
     usage_extended_deadline = mean(late_response),
-    never_used_deadline = all(late_response == 0), 
-    .groups = "drop") %>%
+    never_used_deadline = all(late_response == 0),
+    .groups = "drop"
+  ) %>%
   ungroup() %>%
   # Calculate the mean usage for each domain (taking into account the period)
   group_by(period, domain_id) %>%
@@ -1295,20 +1313,28 @@ ext_deadline_usage <- period_logs %>%
     extended_deadline_group = case_when(
       never_used_deadline ~ "Never",
       usage_extended_deadline > domain_avg_extended_deadline ~ "Above average",
-      TRUE ~ "Below average"))
+      TRUE ~ "Below average"
+    )
+  )
 
 # Compute Q_score at the end of the session, and usage of extended deadline
 multilevel_data <- period_logs %>%
   arrange(user_id, period, domain_id, new_user_domain_session_count, new_user_domain_modified_count) %>%
   group_by(user_id, period, domain_id, new_user_domain_session_count) %>%
   # calculate q_score at the end of the session
-  summarize(q_score = last(new_user_domain_q_score),
-            ext_deadline_usage = mean(late_response), .groups = "drop") %>%
+  summarize(
+    q_score = last(new_user_domain_q_score),
+    ext_deadline_usage = mean(late_response), .groups = "drop"
+  ) %>%
   # need to re-attach grade & difficulty to data
-  left_join(period_logs %>%
-              select(user_id, period, grade, domain_id, difficulty, new_user_domain_session_count,
-                     new_user_domain_modified_count),
-            by = c("user_id", "period", "domain_id", "new_user_domain_session_count"))
+  left_join(
+    period_logs %>%
+      select(
+        user_id, period, grade, domain_id, difficulty, new_user_domain_session_count,
+        new_user_domain_modified_count
+      ),
+    by = c("user_id", "period", "domain_id", "new_user_domain_session_count")
+  )
 
 # Re-number sessions to start from 1 (separate for each period, domain, and user combination)
 multilevel_data_unique <- multilevel_data %>%
@@ -1321,9 +1347,10 @@ multilevel_data_unique <- multilevel_data %>%
 # Add variable describing category of user (never used, above or below average use of extended deadline)
 multilevel_data_unique <- multilevel_data_unique %>%
   left_join(
-    ext_deadline_usage %>% 
+    ext_deadline_usage %>%
       select(user_id, period, domain_id, extended_deadline_group),
-    by = c("user_id", "period", "domain_id")) %>%
+    by = c("user_id", "period", "domain_id")
+  ) %>%
   mutate(extended_deadline_group = relevel(factor(extended_deadline_group), ref = "Never"))
 
 # Check observation numbers per grade, domain
@@ -1368,10 +1395,10 @@ q_score_sd <- attr(scale(multilevel_data_unique$q_score), "scaled:scale")
 
 ```{r}
 ### T-test to check whether q_score penalty is the same, given that an answer was correct VS incorrect in the extended deadline ###
-t_test_data <- period_logs[period_logs$period == "Oct-Dec",] %>%
+t_test_data <- period_logs[period_logs$period == "Oct-Dec", ] %>%
   group_by(user_id, domain_id) %>%
   mutate(q_score_diff = new_user_domain_q_score - lag(new_user_domain_q_score)) %>%
-  mutate(q_score_diff = replace(q_score_diff, is.na(q_score_diff), 0)) %>%  # replace NA with 0
+  mutate(q_score_diff = replace(q_score_diff, is.na(q_score_diff), 0)) %>% # replace NA with 0
   ungroup()
 
 # group 0 = used extended deadline, responded incorrect
@@ -1392,25 +1419,29 @@ print(t_test_result)
 fixed_slopes <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     (1 | user_id),
-  REML = F, data = multilevel_data_unique)
+  REML = F, data = multilevel_data_unique
+)
 
 random_slopes <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique)
+  REML = F, data = multilevel_data_unique
+)
 
 domain <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     domain_id +
     (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique)
+  REML = F, data = multilevel_data_unique
+)
 
 grade <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     domain_id +
     grade +
     (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique)
+  REML = F, data = multilevel_data_unique
+)
 # does not converge with session:grade
 
 difficulty <- lmer(
@@ -1419,7 +1450,8 @@ difficulty <- lmer(
     grade +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)), # increase iterations to achieve convergence
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # does not converge with main effect of difficulty
 # this is because changes in difficulty do not reset session counter
 
@@ -1431,11 +1463,12 @@ diff_domain_grade <- lmer(
     session_scaled:grade +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # best to include grade & domain main effects, but also growth interactions
 
 intervention_1 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     domain_id +
     grade +
@@ -1443,11 +1476,12 @@ intervention_1 <- lmer(
     session_scaled:grade +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # added intervention term (period)
 
 intervention_2 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     domain_id +
     grade +
@@ -1455,13 +1489,14 @@ intervention_2 <- lmer(
     session_scaled:grade:period +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # added interactions between domains & grades with the period
 # this is to account for different slopes between grades and domains, when comparing periods
 # fit is good
 
 intervention_3 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     session_scaled:period:ext_deadline_usage +
     domain_id +
@@ -1470,26 +1505,28 @@ intervention_3 <- lmer(
     session_scaled:grade:period +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # does not converge;
 # adding growth interaction between user-specific usage of extended deadline & period adds these issues
-  
+
 intervention_4 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     period:extended_deadline_group +
     domain_id +
-    grade + 
+    grade +
     session_scaled:domain_id:period +
     session_scaled:grade:period +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # does converge
 # categorizing individuals based on extended deadline usage improves model
 
 intervention_5 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     session_scaled:period:ext_deadline_usage +
     period:extended_deadline_group +
@@ -1499,29 +1536,31 @@ intervention_5 <- lmer(
     session_scaled:grade:period +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # does converge
 # for some reason, adding both user-specific usage of extended deadline and group categories
 # improves the model; however, BIC indicates over-parametrization
 
 intervention_6 <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     session_scaled:period:ext_deadline_usage +
     period:grade:extended_deadline_group +
     domain_id +
-    grade + 
+    grade +
     session_scaled:domain_id:period +
     session_scaled:grade:period +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # does not converge
 # adding interaction between grade & extended deadline usage groups leads to issues
 # however, removing user-specific usage of extended deadline (the next model) solves this
 
 intervention_final <- lmer(
-  q_score_scaled ~ 1 + session_scaled*period +
+  q_score_scaled ~ 1 + session_scaled * period +
     session_scaled:difficulty +
     period:grade:extended_deadline_group +
     domain_id +
@@ -1530,12 +1569,13 @@ intervention_final <- lmer(
     session_scaled:grade:period +
     (1 + session_scaled | user_id),
   control = lmerControl(optCtrl = list(maxfun = 10000)),
-  data = multilevel_data_unique)
+  data = multilevel_data_unique
+)
 # does converge; BIC improvement
 # best model thus far
 
 summary(intervention_5)
-summary(intervention_final) 
+summary(intervention_final)
 anova(intervention_5, intervention_final)
 
 # Predictions will be made using intervention_final
@@ -1561,21 +1601,25 @@ custom_theme <- theme_minimal() +
     plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 10))
+    legend.text = element_text(size = 10)
+  )
 
 # Create a data-frame for SMOOTH (linear) prediction plots (difficulty = 2)
 prediction_smooth <- expand.grid(
   session_scaled = seq(min(multilevel_data_unique$session_scaled),
-                       max(multilevel_data_unique$session_scaled), length.out = 20),
+    max(multilevel_data_unique$session_scaled),
+    length.out = 20
+  ),
   period = unique(multilevel_data_unique$period),
   grade = unique(multilevel_data_unique$grade),
   domain_id = unique(multilevel_data_unique$domain_id),
   difficulty = unique(multilevel_data_unique$difficulty),
   extended_deadline_group = unique(multilevel_data_unique$extended_deadline_group),
-  user_id = "dummy_user")
-  # necessary to include dummy user id, as it's needed for predict() algorithm
-  # however, specific user random effects won't be used in making predictions
-  # as allow.new.levels = TRUE allows predictions based on fixed effects only
+  user_id = "dummy_user"
+)
+# necessary to include dummy user id, as it's needed for predict() algorithm
+# however, specific user random effects won't be used in making predictions
+# as allow.new.levels = TRUE allows predictions based on fixed effects only
 
 # Set all obs in Sep-Oct to have extended_deadline_group set to "Never"
 prediction_smooth <- prediction_smooth %>%
@@ -1584,8 +1628,9 @@ prediction_smooth$extended_deadline_group <- factor(prediction_smooth$extended_d
 
 # Add predictions to the grid
 prediction_smooth$predicted_q_score_scaled <- predict(intervention_final,
-                                                      newdata = prediction_smooth,
-                                                      allow.new.levels = TRUE)
+  newdata = prediction_smooth,
+  allow.new.levels = TRUE
+)
 
 # De-scale session & q_score for plots
 prediction_smooth <- prediction_smooth %>%
@@ -1599,7 +1644,7 @@ prediction_smooth <- prediction_smooth %>%
 # Create data-frame for RAW prediction plots
 prediction_raw <- multilevel_data_unique
 prediction_raw <- prediction_raw %>%
-   mutate(predicted_q_score_scaled = predict(intervention_final, newdata = prediction_raw))
+  mutate(predicted_q_score_scaled = predict(intervention_final, newdata = prediction_raw))
 
 # De-scale session & q_score for plots
 prediction_raw <- prediction_raw %>%
@@ -1619,7 +1664,8 @@ prediction_summary_smooth <- prediction_smooth %>%
   group_by(session, period) %>%
   summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
 prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
-                                           levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
 ### LINEAR - Difference in Ability Growth Between the 2 Periods ###
 ggplot(prediction_summary_smooth, aes(x = session, y = mean_predicted_q_score, color = period)) +
@@ -1639,7 +1685,8 @@ prediction_summary_raw <- prediction_raw %>%
   group_by(session, period) %>%
   summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
 prediction_summary_raw$period <- factor(prediction_summary_raw$period,
-                                        levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
 ggplot(prediction_summary_raw, aes(x = session, y = mean_predicted_q_score, color = period)) +
   geom_line(aes(group = period), size = 1.2) +
@@ -1659,7 +1706,8 @@ prediction_summary_obs <- prediction_raw %>%
   group_by(session, period) %>%
   summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
 prediction_summary_obs$period <- factor(prediction_summary_obs$period,
-                                        levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
 ggplot(prediction_summary_obs, aes(x = session, y = mean_observed_q_score, color = period)) +
   geom_line(aes(group = period), size = 1.2) +
@@ -1685,13 +1733,16 @@ prediction_summary_smooth <- prediction_smooth %>%
   group_by(period, domain_id, session) %>%
   summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
 prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
-                                           levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
 ### LINEAR - Difference in Ability Growth Between the 2 Periods, for all Domains ###
-for (i in domains){
-  p <- ggplot(prediction_summary_smooth[prediction_summary_smooth$domain_id == i,],
-              aes(x = session, y = mean_predicted_q_score, color = period)) +
-    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
+for (i in domains) {
+  p <- ggplot(
+    prediction_summary_smooth[prediction_summary_smooth$domain_id == i, ],
+    aes(x = session, y = mean_predicted_q_score, color = period)
+  ) +
+    geom_line(aes(group = period), size = 1.2) + # Fit line for each period
     theme_minimal() +
     labs(
       title = paste("Linear Predicted Session and Q-Score by Period, Domain", i),
@@ -1710,10 +1761,12 @@ prediction_summary_raw <- prediction_raw %>%
   summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
 prediction_summary_raw$period <- factor(prediction_summary_raw$period, levels = c("Sep-Oct", "Oct-Dec"))
 
-for (i in domains){
-  p <- ggplot(prediction_summary_raw[prediction_summary_raw$domain_id == i,],
-              aes(x = session, y = mean_predicted_q_score, color = period)) +
-    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
+for (i in domains) {
+  p <- ggplot(
+    prediction_summary_raw[prediction_summary_raw$domain_id == i, ],
+    aes(x = session, y = mean_predicted_q_score, color = period)
+  ) +
+    geom_line(aes(group = period), size = 1.2) + # Fit line for each period
     theme_minimal() +
     labs(
       title = paste("Raw Predicted Session and Q-Score by Period, Domain", i),
@@ -1732,12 +1785,15 @@ prediction_summary_obs <- prediction_raw %>%
   group_by(period, domain_id, session) %>%
   summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
 prediction_summary_obs$period <- factor(prediction_summary_obs$period,
-                                        levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
-for (i in domains){
-  p <- ggplot(prediction_summary_obs[prediction_summary_obs$domain_id == i,],
-              aes(x = session, y = mean_observed_q_score, color = period)) +
-    geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
+for (i in domains) {
+  p <- ggplot(
+    prediction_summary_obs[prediction_summary_obs$domain_id == i, ],
+    aes(x = session, y = mean_observed_q_score, color = period)
+  ) +
+    geom_line(aes(group = period), size = 1.2) + # Fit line for each period
     theme_minimal() +
     labs(
       title = paste("Observed Session and Q-Score by Period, Domain", i),
@@ -1761,11 +1817,14 @@ prediction_summary_smooth <- prediction_smooth %>%
   group_by(period, grade, session) %>%
   summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
 prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
-                                           levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
-for (i in grades){
-  p <- ggplot(prediction_summary_smooth[prediction_summary_smooth$grade == i,],
-              aes(x = session, y = mean_predicted_q_score, color = period)) +
+for (i in grades) {
+  p <- ggplot(
+    prediction_summary_smooth[prediction_summary_smooth$grade == i, ],
+    aes(x = session, y = mean_predicted_q_score, color = period)
+  ) +
     geom_line(aes(group = period), size = 1.2) +
     theme_minimal() +
     labs(
@@ -1784,11 +1843,14 @@ prediction_summary_raw <- prediction_raw %>%
   group_by(period, grade, session) %>%
   summarize(mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
 prediction_summary_raw$period <- factor(prediction_summary_raw$period,
-                                        levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
-for (i in grades){
-  p <- ggplot(prediction_summary_raw[prediction_summary_raw$grade == i,],
-              aes(x = session, y = mean_predicted_q_score, color = period)) +
+for (i in grades) {
+  p <- ggplot(
+    prediction_summary_raw[prediction_summary_raw$grade == i, ],
+    aes(x = session, y = mean_predicted_q_score, color = period)
+  ) +
     geom_line(aes(group = period), size = 1.2) +
     theme_minimal() +
     labs(
@@ -1807,11 +1869,14 @@ prediction_summary_obs <- prediction_raw %>%
   group_by(period, grade, session) %>%
   summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
 prediction_summary_obs$period <- factor(prediction_summary_obs$period,
-                                        levels = c("Sep-Oct", "Oct-Dec"))
+  levels = c("Sep-Oct", "Oct-Dec")
+)
 
-for (i in grades){
-  p <- ggplot(prediction_summary_obs[prediction_summary_obs$grade == i,],
-              aes(x = session, y = mean_observed_q_score, color = period)) +
+for (i in grades) {
+  p <- ggplot(
+    prediction_summary_obs[prediction_summary_obs$grade == i, ],
+    aes(x = session, y = mean_observed_q_score, color = period)
+  ) +
     geom_line(aes(group = period), size = 1.2) +
     theme_minimal() +
     labs(
@@ -1840,7 +1905,7 @@ prediction_summary_raw <- prediction_raw %>%
   summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
 
 ggplot(prediction_summary_raw, aes(x = extended_deadline_group, y = mean_observed_q_score, color = extended_deadline_group)) +
-  geom_point(size = 3, position = position_dodge(width = 0.5)) +  # Mean points
+  geom_point(size = 3, position = position_dodge(width = 0.5)) + # Mean points
   labs(
     title = "Mean Q-Score by Extended Deadline Usage (Oct-Dec)",
     x = "Extended Deadline Usage",
@@ -1855,15 +1920,17 @@ ggplot(prediction_summary_raw, aes(x = extended_deadline_group, y = mean_observe
 ```{r}
 ### Average q_score for different grades & extended deadline usage groupings ###
 
-## OBSERVED DATA PLOT ## 
+## OBSERVED DATA PLOT ##
 # results are the same when using predicted q_score values instead of observed ones
 
 # Aggregate over all other unnecessary variables
 prediction_summary_raw <- prediction_raw %>%
   filter(period == "Oct-Dec") %>%
   group_by(grade, extended_deadline_group) %>%
-  summarize(mean_observed_q_score = mean(q_score),
-            mean_predicted_q_score = mean(predicted_q_score), .groups = "drop")
+  summarize(
+    mean_observed_q_score = mean(q_score),
+    mean_predicted_q_score = mean(predicted_q_score), .groups = "drop"
+  )
 
 prediction_summary_raw %>%
   ggplot(aes(x = grade, y = mean_observed_q_score, color = extended_deadline_group)) +
@@ -1876,7 +1943,6 @@ prediction_summary_raw %>%
   ) +
   custom_theme +
   scale_color_manual(values = c("green", "red", "blue"))
-
 ```
 
 
@@ -1891,9 +1957,9 @@ num_users <- n_distinct(ed_logs$user_id)
 # Finding users that alternate between showing coins and not
 swappers <- ed_logs %>%
   select(user_id, show_coins) %>%
-  distinct(user_id, show_coins) %>%       # Get unique choices
-  count(user_id) %>%                    
-  filter(n == 2) %>%                    
+  distinct(user_id, show_coins) %>% # Get unique choices
+  count(user_id) %>%
+  filter(n == 2) %>%
   pull(user_id)
 # 11118 users have swapped at least once
 # Proportion
@@ -1902,9 +1968,9 @@ length(swappers) / num_users # .477065
 # Finding users that have never swapped between showing coins or not
 not_swappers <- ed_logs %>%
   select(user_id, show_coins) %>%
-  distinct(user_id, show_coins) %>%       # Get unique choices
-  count(user_id) %>%                    
-  filter(n == 1) %>%                    
+  distinct(user_id, show_coins) %>% # Get unique choices
+  count(user_id) %>%
+  filter(n == 1) %>%
   pull(user_id)
 # 12187 users have never swapped
 # Proportion
@@ -1918,7 +1984,6 @@ no_shows <- ed_logs %>%
 # 132 users never showed coins
 # Proportion
 length(no_shows) / num_users # .005664021
-
 ```
 
 
@@ -1940,9 +2005,9 @@ sankey_tibble <- sankey_data %>%
 
 # Make the plot
 sankey_tibble %>%
-ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
   theme_minimal() +
-  #scale_fill_manual(values = color_scheme2) +
+  # scale_fill_manual(values = color_scheme2) +
   geom_flow(color = "darkgray") +
   geom_stratum() +
   theme(legend.position = "top") +
@@ -1955,11 +2020,13 @@ Zooming into this year and changing to weekly.
 # Getting data needed for sankey plot
 sankey_data <- ed_logs %>%
   select(user_id, show_coins, time_weeks, date) %>%
-  filter(user_id %in% swappers,
-         time_weeks > 52) %>%
+  filter(
+    user_id %in% swappers,
+    time_weeks > 52
+  ) %>%
   mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE)) %>%
   group_by(interval) %>%
-  mutate(start_date = as.character(min(as.Date(date)))) %>%  # Assign the earliest date in the interval
+  mutate(start_date = as.character(min(as.Date(date)))) %>% # Assign the earliest date in the interval
   ungroup()
 
 
@@ -1972,7 +2039,7 @@ sankey_tibble <- sankey_data %>%
 
 # Make the plot
 coins_sankey <- sankey_tibble %>%
-ggplot(aes(x = start_date, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  ggplot(aes(x = start_date, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
   theme_minimal() +
   geom_flow(color = "darkgray") +
   geom_stratum() +
@@ -1981,7 +2048,6 @@ ggplot(aes(x = start_date, stratum = mode_show_coins, alluvium = user_id, fill =
 
 coins_sankey
 ggsave("Jan Group/Plots/Show_coins_Sankey.jpeg")
-
 ```
 
 
@@ -1991,15 +2057,17 @@ Between section 30 and 31 is when the change is made. Which happens to also be p
 # Looking deeper. Investigating if students who've never shown coins between sep 1st 2024 and oct 25th 2024 are part of that exodus
 stuff <- ed_logs %>%
   select(user_id, show_coins, time_weeks, date) %>%
-  filter(user_id %in% swappers, 
-         time_weeks %in% 52:64) %>%
+  filter(
+    user_id %in% swappers,
+    time_weeks %in% 52:64
+  ) %>%
   arrange(user_id, time_weeks)
 
 # Users who never showed coins in section 30 where change occurs
 unknowners <- stuff %>%
-  filter(time_weeks %in% 52:60) %>%    # Keep only rows within the specified weeks
-  group_by(user_id) %>%                   # Group by user
-  filter(all(show_coins == 0)) %>%        # Keep only users with all 0s across the weeks
+  filter(time_weeks %in% 52:60) %>% # Keep only rows within the specified weeks
+  group_by(user_id) %>% # Group by user
+  filter(all(show_coins == 0)) %>% # Keep only users with all 0s across the weeks
   distinct(user_id) %>%
   pull(user_id)
 
@@ -2007,7 +2075,7 @@ unknowners <- stuff %>%
 coiners <- stuff %>%
   group_by(user_id, time_weeks) %>%
   filter(time_weeks %in% 61:62 & any(show_coins == 1)) %>%
-  distinct(user_id) %>% 
+  distinct(user_id) %>%
   pull(user_id)
 
 # Users who went from never showing to showing after the change
@@ -2018,7 +2086,6 @@ enlightened <- stuff %>%
 
 # Proportion of users who went from not showing coins at all before the change, to showing after change
 length(enlightened) / length(unknowners) # 0.6403509
-
 ```
 
 With over about 64% of users who weren't showing coins changing to showing coins after the change, and showing coins is the only way to see if you're going into extended time, this provides some evidence that communication between students about the extended deadline is likely. However! this could also just be due to students curious about if what changes have been made to the coin animation.
@@ -2027,26 +2094,29 @@ If they now show coins more often than not this could be a sign that it is not i
 
 ```{r}
 # Do they show coins more than 1 session
-# Count of show_coin setting for never showers who became showers after the change 
+# Count of show_coin setting for never showers who became showers after the change
 show_count <- stuff %>%
   filter(user_id %in% enlightened, time_weeks > 60) %>%
   group_by(user_id, show_coins) %>%
-  summarize(count = n(), .groups = "drop") 
+  summarize(count = n(), .groups = "drop")
 
 # Line chart ordered by proportion of showing coins
 coins_plot <- show_count %>%
   group_by(user_id) %>%
-  mutate(total = sum(count),                         
-    prop = sum(count[show_coins == 1]) / total 
+  mutate(
+    total = sum(count),
+    prop = sum(count[show_coins == 1]) / total
   ) %>%
   ungroup() %>%
   mutate(user_id = reorder(user_id, -total, mean)) %>%
   mutate(user_id = reorder(user_id, -prop, mean)) %>% # Reorder by proportion
-ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coins)) +
+  ggplot(aes(x = user_id, y = count, color = factor(show_coins), group = show_coins)) +
   geom_line() +
-  scale_color_manual(values = c("1" = "#00bfc4", "0" = "#f8766d"),
-                     labels = c("Not Showing", "Showing"),
-                     name = "Coins") +
+  scale_color_manual(
+    values = c("1" = "#00bfc4", "0" = "#f8766d"),
+    labels = c("Not Showing", "Showing"),
+    name = "Coins"
+  ) +
   labs(title = "User Coin Showing Behavior", subtitle = "Ordered by Proportion of Coins Showing & Total Played", x = "Users", y = "Count") +
   custom_theme +
   theme(axis.text.x = element_blank())
@@ -2057,10 +2127,11 @@ ggsave("Jan Group/Plots/Coin Showing.jpeg")
 
 calc <- show_count %>%
   group_by(user_id) %>%
-  mutate(total = sum(count),                         
-    prop = sum(count[show_coins == 1]) / total 
+  mutate(
+    total = sum(count),
+    prop = sum(count[show_coins == 1]) / total
   ) %>%
-  ungroup() 
+  ungroup()
 paste0("Of users who switched from never showing to showing ", round(sum(calc$prop >= .5) / nrow(calc) * 100, 2), "% of them stuck with showing coins most of the time.")
 ```
 
@@ -2075,14 +2146,15 @@ sankey_data <- ed_logs %>%
   filter(time_weeks > 52) %>%
   mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE)) %>%
   group_by(interval) %>%
-  mutate(start_date = min(as.Date(date))) %>%  # Assign the earliest date in the interval
+  mutate(start_date = min(as.Date(date))) %>% # Assign the earliest date in the interval
   ungroup()
 
 sankey_data <- sankey_data %>%
   mutate(difficulty = factor(
     difficulty,
     levels = c(0, 1, 2),
-    labels = c("Easy", "Medium", "Hard")))
+    labels = c("Easy", "Medium", "Hard")
+  ))
 
 # Group by individual and interval, then summarize
 sankey_tibble <- sankey_data %>%
@@ -2090,14 +2162,13 @@ sankey_tibble <- sankey_data %>%
   summarize(Mode_difficulty = names(which.max(table(difficulty)))) %>%
   ungroup() %>%
   mutate(start_date = as.character(start_date))
-  
+
 
 color_scheme2 <- c(
   "Easy" = "#008856",
   "Medium" = "#0067A5",
   "Hard" = "#BE0032"
 )
-
 ```
 
 
@@ -2105,7 +2176,7 @@ color_scheme2 <- c(
 # Change in difficulty selection plot
 # Make the sankey plot
 dif_sankey <- sankey_tibble %>%
-ggplot(aes(x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill = Mode_difficulty, label = Mode_difficulty)) +
+  ggplot(aes(x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill = Mode_difficulty, label = Mode_difficulty)) +
   scale_fill_manual(values = color_scheme2) +
   geom_flow(color = "darkgray") +
   geom_stratum() +
@@ -2114,7 +2185,6 @@ ggplot(aes(x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill =
 
 dif_sankey
 ggsave("Jan Group/Plots/Mode Difficulty Sankey.jpeg")
-
 ```
 
 
@@ -2125,19 +2195,23 @@ Do these students who have left easy use the extended deadline?
 # Extended deadline/difficulty data
 ed_diff_data <- ed_logs %>%
   select(user_id, difficulty, time_weeks, late_response, answer) %>%
-  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
-         difficulty = factor(difficulty,
-                             levels = c(0, 1, 2),
-                             labels = c("Easy", "Medium", "Hard"))) %>%
+  mutate(
+    interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
+    difficulty = factor(difficulty,
+      levels = c(0, 1, 2),
+      labels = c("Easy", "Medium", "Hard")
+    )
+  ) %>%
   filter(interval > 29)
 
 ed_diff_tibble <- ed_diff_data %>%
   group_by(user_id, interval) %>%
-  summarize(mode_difficulty = names(which.max(table(difficulty))),
-            extended_deadline_total = sum(late_response == 1 & answer != "…"),
-            non_response_total = sum(answer == "…")) %>%
+  summarize(
+    mode_difficulty = names(which.max(table(difficulty))),
+    extended_deadline_total = sum(late_response == 1 & answer != "…"),
+    non_response_total = sum(answer == "…")
+  ) %>%
   ungroup()
-
 ```
 
 
@@ -2146,21 +2220,26 @@ ed_diff_tibble <- ed_diff_data %>%
 # Interaction of leaving easy and extended deadline
 braves_all <- ed_diff_tibble %>%
   group_by(user_id) %>%
-  mutate(first_cat = first(mode_difficulty), 
-         switched = mode_difficulty != first_cat & interval > 1)
+  mutate(
+    first_cat = first(mode_difficulty),
+    switched = mode_difficulty != first_cat & interval > 1
+  )
 
 # Grouping and labeling based on switching and starting choices
 suppressWarnings(switch_tracking_all <- braves_all %>% # Gives a false warning about inf
   group_by(user_id) %>%
-  mutate(first_switch_week = if_else(switched, interval, NA_integer_), # Week of switch
-    first_switch_week = case_when(any(switched) ~ min(first_switch_week, na.rm = TRUE),
-                                  TRUE ~ NA_integer_),# Get the earliest switch
-    stay_switched = if_else(                           # Check if they stay switched
-      interval >= first_switch_week & switched, 
-      mode_difficulty, 
+  mutate(
+    first_switch_week = if_else(switched, interval, NA_integer_), # Week of switch
+    first_switch_week = case_when(
+      any(switched) ~ min(first_switch_week, na.rm = TRUE),
+      TRUE ~ NA_integer_
+    ), # Get the earliest switch
+    stay_switched = if_else( # Check if they stay switched
+      interval >= first_switch_week & switched,
+      mode_difficulty,
       NA_character_
     )
-  )) 
+  ))
 # Groups labeled and response types counted
 stayers_all <- switch_tracking_all %>%
   summarise(
@@ -2196,32 +2275,39 @@ stayers_all <- switch_tracking_all %>%
 
 # Getting total members
 stayers_all %>%
-  summarise(easy_never = sum(stayed_switched == "Never Switched - Easy"),
-            medium_never = sum(stayed_switched == "Never Switched - Medium"),
-            hard_never = sum(stayed_switched == "Never Switched - Hard"),
-            easy_didnt = sum(stayed_switched == "Didn't Stay Switched - Easy"),
-            medium_didnt = sum(stayed_switched == "Didn't Stay Switched - Medium"),
-            hard_didnt = sum(stayed_switched == "Didn't Stay Switched - Hard"),
-            easy_stayed = sum(stayed_switched == "Stayed Switched - Easy"),
-            medium_stayed = sum(stayed_switched == "Stayed Switched - Medium"),
-            hard_stayed = sum(stayed_switched == "Stayed Switched - Hard"))
+  summarise(
+    easy_never = sum(stayed_switched == "Never Switched - Easy"),
+    medium_never = sum(stayed_switched == "Never Switched - Medium"),
+    hard_never = sum(stayed_switched == "Never Switched - Hard"),
+    easy_didnt = sum(stayed_switched == "Didn't Stay Switched - Easy"),
+    medium_didnt = sum(stayed_switched == "Didn't Stay Switched - Medium"),
+    hard_didnt = sum(stayed_switched == "Didn't Stay Switched - Hard"),
+    easy_stayed = sum(stayed_switched == "Stayed Switched - Easy"),
+    medium_stayed = sum(stayed_switched == "Stayed Switched - Medium"),
+    hard_stayed = sum(stayed_switched == "Stayed Switched - Hard")
+  )
 
 # Joining switch labels and ed_logs relevant stuff
 fgb_data <- ed_logs %>%
   select(user_id, difficulty, time_weeks, late_response, answer, date) %>%
-  mutate(interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
-         difficulty = factor(difficulty,
-                             levels = c(0, 1, 2),
-                             labels = c("Easy", "Medium", "Hard"))) %>%
+  mutate(
+    interval = cut(time_weeks, breaks = seq(0, max(time_weeks), by = 2), labels = FALSE),
+    difficulty = factor(difficulty,
+      levels = c(0, 1, 2),
+      labels = c("Easy", "Medium", "Hard")
+    )
+  ) %>%
   group_by(user_id, interval) %>%
-  summarize(mode_difficulty = names(which.max(table(difficulty))),
-            extended_deadline_total = sum(late_response == 1 & answer != "…"),
-            non_response_before = sum(answer == "…" & date < change_date, na.rm = TRUE),
-            non_response_after = sum(answer == "…" & date >= change_date, na.rm = TRUE),
-            total_before = sum(date < change_date, na.rm = TRUE),
-            total_after = sum(date >= change_date, na.rm = TRUE),
-            .groups = "drop")
-  
+  summarize(
+    mode_difficulty = names(which.max(table(difficulty))),
+    extended_deadline_total = sum(late_response == 1 & answer != "…"),
+    non_response_before = sum(answer == "…" & date < change_date, na.rm = TRUE),
+    non_response_after = sum(answer == "…" & date >= change_date, na.rm = TRUE),
+    total_before = sum(date < change_date, na.rm = TRUE),
+    total_after = sum(date >= change_date, na.rm = TRUE),
+    .groups = "drop"
+  )
+
 collapsed_fgb <- fgb_data %>%
   group_by(user_id) %>%
   summarize(
@@ -2234,15 +2320,19 @@ collapsed_fgb <- fgb_data %>%
 
 
 collapsed_long <- collapsed_fgb %>%
-  pivot_longer(cols = c(extended_deadline, no_answer_before, no_answer_after),
-               names_to = "response_type",
-               values_to = "value"
+  pivot_longer(
+    cols = c(extended_deadline, no_answer_before, no_answer_after),
+    names_to = "response_type",
+    values_to = "value"
   ) %>%
-  mutate(stayed_switched = factor(stayed_switched, 
-                                  levels = c("Didn't Stay Switched - Easy", "Didn't Stay Switched - Medium", "Didn't Stay Switched - Hard", "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard", "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard")),
-         response_type = factor(response_type,
-                                levels = c("no_answer_before", "no_answer_after", "extended_deadline"),
-                                labels = c("No Answer Before", "No Answer After", "Late Response"))
+  mutate(
+    stayed_switched = factor(stayed_switched,
+      levels = c("Didn't Stay Switched - Easy", "Didn't Stay Switched - Medium", "Didn't Stay Switched - Hard", "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard", "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard")
+    ),
+    response_type = factor(response_type,
+      levels = c("no_answer_before", "no_answer_after", "extended_deadline"),
+      labels = c("No Answer Before", "No Answer After", "Late Response")
+    )
   )
 ```
 
@@ -2272,7 +2362,7 @@ full_plot <- ggplot(collapsed_long, aes(x = response_type, y = value, fill = res
     legend.position = "bottom",
     axis.title.x = element_blank(),
     axis.text.x = element_blank()
-  ) 
+  )
 
 full_plot
 ggsave("Jan Group/Plots/Response Totals.jpeg")
@@ -2292,17 +2382,16 @@ fb_plot <- ggplot(collapsed_long, aes(x = response_type, y = value, fill = respo
     fill = "Response Type"
   ) +
   custom_theme +
-  facet_wrap(~ stayed_switched) +
+  facet_wrap(~stayed_switched) +
   theme(
     strip.text = element_text(size = 10),
     legend.position = "bottom",
     axis.title.x = element_blank(),
     axis.text.x = element_blank()
-  ) 
+  )
 
 fb_plot
 ggsave("Jan Group/Plots/Response totals by Difficulty.jpeg")
-
 ```
 
 how many rage quits after non-answer before vs how many rq after late response and/or non-answer after. soft quits after late response, vs non_response. Use Threshold modelling (psych) for measuring build up and response w/ and w/out for quitting.
@@ -2335,29 +2424,35 @@ softies <- motivation_data %>%
   select(user_id, domain_id, session_number, play_sesh, session) %>%
   mutate(full = if_else(domain_id == 5, 15, 10)) %>%
   group_by(user_id, domain_id, session_number, play_sesh, session, full) %>%
-  summarise(count = n(),
-            soft_quit = case_when(all(count != full & session == "domain") ~ TRUE,
-                           all(count == full & session == "domain") ~ FALSE,
-                           all(count %% full != 0 & session == "learning_goal") ~ TRUE,
-                           all(count %% full == 0 & session == "learning_goal") ~ FALSE,
-                           TRUE ~ NA),
-            .groups = "drop") %>%
+  summarise(
+    count = n(),
+    soft_quit = case_when(
+      all(count != full & session == "domain") ~ TRUE,
+      all(count == full & session == "domain") ~ FALSE,
+      all(count %% full != 0 & session == "learning_goal") ~ TRUE,
+      all(count %% full == 0 & session == "learning_goal") ~ FALSE,
+      TRUE ~ NA
+    ),
+    .groups = "drop"
+  ) %>%
   select(-count, -full)
 
 
 # Merging soft-quit into motivation data
 motivation_data <- motivation_data %>%
   left_join(softies) %>%
-  mutate(response_timing = case_when(late_response == 1 & answer != "…" ~ "extended",
-                                     answer == "…" & date < change_date ~ "non_response_before",
-                                     answer == "…" & date >= change_date ~ "non_response_after",
-                                     TRUE ~ "on_time"))
+  mutate(response_timing = case_when(
+    late_response == 1 & answer != "…" ~ "extended",
+    answer == "…" & date < change_date ~ "non_response_before",
+    answer == "…" & date >= change_date ~ "non_response_after",
+    TRUE ~ "on_time"
+  ))
 
 # Calculating if session had likely afk
 afking <- motivation_data %>%
   group_by(user_id, domain_id, session_number, play_sesh, session) %>%
   summarise(afk = any(rle(answer == "…")$values & rle(answer == "…")$lengths >= 3))
-  
+
 # Merging back into motivation_data
 motivation_data <- motivation_data %>%
   left_join(afking) %>%
@@ -2367,17 +2462,19 @@ motivation_data <- motivation_data %>%
 ```{r}
 # Making the visualizations
 # Color Pallette
-before_after_color <- c("Before" = "#00bfc4",
-                  "After" = "#f8766d")
+before_after_color <- c(
+  "Before" = "#00bfc4",
+  "After" = "#f8766d"
+)
 
 # Plotting percent of soft quitting and afking before and after change
 afk_sq_plot <- motivation_data %>%
   group_by(change) %>%
   summarise(
-    soft_quitting_count = sum(soft_quit),      
-    afking_count = sum(afk),                  
-    soft_quitting = soft_quitting_count / n() * 100,  
-    afking = afking_count / n() * 100,       
+    soft_quitting_count = sum(soft_quit),
+    afking_count = sum(afk),
+    soft_quitting = soft_quitting_count / n() * 100,
+    afking = afking_count / n() * 100,
     .groups = "drop"
   ) %>%
   pivot_longer(
@@ -2411,7 +2508,6 @@ afk_sq_plot <- motivation_data %>%
 
 afk_sq_plot
 ggsave("Jan Group/Plots/Soft Quitting and AFK.jpeg")
-
 ```
 
 
@@ -2419,18 +2515,20 @@ How much of hard quitting had a soft quit before it vs a complete session, befor
 
 ```{r}
 # Color Pallet
-soft_complete_color <- c("completed_session" = "#00bfc4",
-                  "soft_quitting" = "#f8766d")
+soft_complete_color <- c(
+  "completed_session" = "#00bfc4",
+  "soft_quitting" = "#f8766d"
+)
 
 # Plotting percent of hard quits after soft-quit vs completed session
 pie_data <- motivation_data %>%
   filter(hard_quit == TRUE) %>%
   group_by(change) %>%
   summarise(
-    soft_quitting_count = sum(soft_quit),      
-    completed_session_count = sum(!soft_quit),          
-    soft_quitting = soft_quitting_count / n() * 100,  
-    completed_session = completed_session_count / n() * 100,  
+    soft_quitting_count = sum(soft_quit),
+    completed_session_count = sum(!soft_quit),
+    soft_quitting = soft_quitting_count / n() * 100,
+    completed_session = completed_session_count / n() * 100,
     .groups = "drop"
   ) %>%
   pivot_longer(
@@ -2442,17 +2540,17 @@ pie_data <- motivation_data %>%
     cols = c(soft_quitting_count, completed_session_count),
     names_to = "quit_type_count",
     values_to = "count",
-    names_transform = list(quit_type_count = ~ gsub("_count", "", .x))  # Clean names
+    names_transform = list(quit_type_count = ~ gsub("_count", "", .x)) # Clean names
   ) %>%
   filter(quit_type == quit_type_count) # Match percentage and counts
 
-pie <- pie_data %>%  
+pie <- pie_data %>%
   ggplot(aes(x = "", y = value, fill = quit_type)) +
   geom_bar(stat = "identity", width = 1) +
-  coord_polar(theta = "y") +  # Convert to pie chart
-  facet_wrap(~ change) +  # Facet by 'before' or 'after'
+  coord_polar(theta = "y") + # Convert to pie chart
+  facet_wrap(~change) + # Facet by 'before' or 'after'
   geom_text(
-    aes(label = paste0(quit_type, "\n", round(value, 1), "%\n", count)), 
+    aes(label = paste0(quit_type, "\n", round(value, 1), "%\n", count)),
     position = position_stack(vjust = 0.5)
   ) +
   scale_fill_manual(values = soft_complete_color) +
@@ -2461,7 +2559,7 @@ pie <- pie_data %>%
     x = NULL, y = NULL,
     fill = "Quit Type"
   ) +
-  theme_void() +  # Use theme_void to remove axis and grid lines for pie charts
+  theme_void() + # Use theme_void to remove axis and grid lines for pie charts
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
     strip.text = element_text(size = 12),
@@ -2470,7 +2568,6 @@ pie <- pie_data %>%
 
 pie
 ggsave("Jan Group/Plots/Hard Quit: Soft vs Complete.jpeg")
-
 ```
 
 
@@ -2479,43 +2576,44 @@ Cox Proportional Hazards Model to check if extended_deadline use has an increase
 
 ```{r}
 # Function to plot the different survival curves
-surv_plotter <- function(surv_fit_grouped, groups = c("No Extension Used", "Extension Used"), title_specification, xlimit){
+surv_plotter <- function(surv_fit_grouped, groups = c("No Extension Used", "Extension Used"), title_specification, xlimit) {
+  # Color Pallet
+  custom_color <- c("#f8766d", "#00bfc4")
 
-# Color Pallet
-custom_color <- c("#f8766d", "#00bfc4")
+  # Convert summary to dataframe
+  surv_df_grouped <- data.frame(
+    time = surv_fit_grouped$time,
+    surv_0 = surv_fit_grouped$surv[, 1],
+    surv_1 = surv_fit_grouped$surv[, 2],
+    lower_0 = surv_fit_grouped$lower[, 1],
+    lower_1 = surv_fit_grouped$lower[, 2],
+    upper_0 = surv_fit_grouped$upper[, 1],
+    upper_1 = surv_fit_grouped$upper[, 2]
+  )
 
-# Convert summary to dataframe
-surv_df_grouped <- data.frame(
-  time = surv_fit_grouped$time,
-  surv_0 = surv_fit_grouped$surv[, 1],  
-  surv_1 = surv_fit_grouped$surv[, 2],  
-  lower_0 = surv_fit_grouped$lower[, 1],  
-  lower_1 = surv_fit_grouped$lower[, 2],  
-  upper_0 = surv_fit_grouped$upper[, 1],  
-  upper_1 = surv_fit_grouped$upper[, 2]   
-)
+  # Pivot to long format
+  plot <- surv_df_grouped %>%
+    pivot_longer(
+      cols = -time,
+      names_to = c(".value", "Group"),
+      names_sep = "_"
+    ) %>%
+    mutate(Group = factor(Group, levels = c("0", "1"), labels = groups)) %>%
+    # Plot grouped Cox-Adjusted Kaplan-Meier curves
+    ggplot(aes(x = time, y = surv, color = Group)) +
+    scale_color_manual(values = custom_color) +
+    geom_step() +
+    xlim(0, xlimit) +
+    geom_ribbon(aes(ymin = lower, ymax = upper, fill = Group), alpha = 0.2) +
+    labs(
+      x = "Time (seconds)",
+      y = "Survival Probability",
+      title = "Cox-Adjusted Survival Curves",
+      subtitle = title_specification
+    ) +
+    custom_theme
 
-# Pivot to long format
-plot <- surv_df_grouped %>%
-  pivot_longer(cols = -time, 
-               names_to = c(".value", "Group"),
-               names_sep = "_") %>%
-  mutate(Group = factor(Group, levels = c("0", "1"), labels = groups)) %>%
-
-
-# Plot grouped Cox-Adjusted Kaplan-Meier curves
-ggplot(aes(x = time, y = surv, color = Group)) +
-  scale_color_manual(values = custom_color) +
-  geom_step() +
-  xlim(0, xlimit) +
-  geom_ribbon(aes(ymin = lower, ymax = upper, fill = Group), alpha = 0.2) +
-  labs(x = "Time (seconds)",
-       y = "Survival Probability", 
-       title = "Cox-Adjusted Survival Curves",
-       subtitle = title_specification) +
-  custom_theme 
-
-return(plot)
+  return(plot)
 }
 ```
 
@@ -2526,16 +2624,17 @@ cox_data_soft <- motivation_data %>%
   # Because time format was refusing to work
   mutate(seconds_since_midnight = hour(date) * 3600 + minute(date) * 60 + second(date)) %>%
   group_by(user_id, play_sesh, session_number, domain_id, session) %>%
-  summarise(duration = ifelse(n() > 1, # Some times only 1 item played
-                       as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)), 
-                       as.integer(response_in_seconds)),
-            extended_deadline_used = any(response_timing == "extended"),
-            soft_quit = any(soft_quit),
-            hard_quit = any(hard_quit),
-            change = first(change),
-            .groups = "drop"
+  summarise(
+    duration = ifelse(n() > 1, # Some times only 1 item played
+      as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)),
+      as.integer(response_in_seconds)
+    ),
+    extended_deadline_used = any(response_timing == "extended"),
+    soft_quit = any(soft_quit),
+    hard_quit = any(hard_quit),
+    change = first(change),
+    .groups = "drop"
   )
-
 ```
 
 Duration could use further investigation, considering there are some sessions with extreme durations, could be interesting for checking for afks. A decent amount have soft_quit and/or hard_quit true (eyeballing it seems like if soft_quit is true then hard_quit usually is) but plenty don't. Interesting.
@@ -2546,9 +2645,10 @@ cox_data_hard <- motivation_data %>%
   mutate(seconds_since_midnight = hour(date) * 3600 + minute(date) * 60 + second(date)) %>%
   group_by(user_id, play_sesh) %>%
   summarise(
-    duration = ifelse(n() > 1, 
-                      as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)), 
-                       as.integer(response_in_seconds)),
+    duration = ifelse(n() > 1,
+      as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)),
+      as.integer(response_in_seconds)
+    ),
     extended_deadline_used = any(response_timing == "extended"),
     soft_quit = any(soft_quit),
     hard_quit = any(hard_quit),
@@ -2574,7 +2674,6 @@ se_plot <- surv_plotter(cox_fit_soft, title_specification = ("Extended Duration 
 
 se_plot
 ggsave("Jan Group/Plots/Soft Quitting Cox-Curve: Extended Duration.jpeg")
-
 ```
 
 What about if we only include since the UI change?
@@ -2594,7 +2693,6 @@ se_after_plot <- surv_plotter(cox_fit_soft_after, title_specification = ("Extend
 
 se_after_plot
 ggsave("Jan Group/Plots/Soft Quitting Cox-Curve: Extended Duration only After.jpeg")
-
 ```
 
 It appears that the main difference is just the increased confidence intervals due to having less data. This is very promising evidence that the extended deadline is helping students stick with their sessions.
@@ -2612,7 +2710,6 @@ he_plot <- surv_plotter(cox_fit_hard, title_specification = ("Extended Duration 
 
 he_plot
 ggsave("Jan Group/Plots/Hard Quitting Cox-Curve: Extended Duration.jpeg")
-
 ```
 
 ```{r, warning=FALSE}
@@ -2630,7 +2727,6 @@ he_after_plot <- surv_plotter(cox_fit_hard_after, title_specification = ("Extend
 
 he_after_plot
 ggsave("Jan Group/Plots/Hard Quitting Cox-Curve: Extended Duration only After.jpeg")
-
 ```
 
 It is only slightly, however, the gap between using the extended deadline and not has actually increased, with extended increasing in survival chance and non-extended use decreasing in survival chance. Again, more evidence that it is a helpful intervention for motivating students to keep going. 
@@ -2642,14 +2738,16 @@ It is only slightly, however, the gap between using the extended deadline and no
 cox_data_hard_complete <- motivation_data %>%
   mutate(seconds_since_midnight = hour(date) * 3600 + minute(date) * 60 + second(date)) %>%
   group_by(user_id, play_sesh) %>%
-  summarise(duration = ifelse(n() > 1, 
-                              as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)), 
-                              response_in_seconds),
-            extended_deadline_used = any(response_timing == "extended"),
-            complete_session = any(soft_quit == FALSE),
-            soft_quit = any(soft_quit),
-            hard_quit = any(hard_quit),
-            .groups = "drop"
+  summarise(
+    duration = ifelse(n() > 1,
+      as.integer(max(seconds_since_midnight) - min(seconds_since_midnight)),
+      response_in_seconds
+    ),
+    extended_deadline_used = any(response_timing == "extended"),
+    complete_session = any(soft_quit == FALSE),
+    soft_quit = any(soft_quit),
+    hard_quit = any(hard_quit),
+    .groups = "drop"
   ) %>%
   filter(complete_session == TRUE)
 ```
@@ -2665,7 +2763,6 @@ cox_fit_hard_complete <- survfit(cox_model_hard_complete, newdata = data.frame(e
 
 # Plot it
 surv_plotter(cox_fit_hard_complete, groups = c("no extended", "extended"), title_specification = ("Extended Duration and Application Quitting: At Least 1"), xlimit = 5000)
-
 ```
 
 Also doesn't seem to change the curve very much, only increasing the survival chance very slightly.
@@ -2675,4 +2772,3 @@ Also doesn't seem to change the curve very much, only increasing the survival ch
 ```{r}
 oefenwebDatabase::close_connection(con)
 ```
-
