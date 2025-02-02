@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+
 ```{r}
 # Loading packages
 library(cowplot)
@@ -65,7 +66,56 @@ ed_logs$date <-
 ```
 
 
-Ender: analyzing growth slopes in the first 2 months of 2024 (Sep-Oct 25) to growth slopes after the change (Oct 25 - Dec)
+```{r}
+# Getting item deadlines for domain 59
+items_5 <- deadlines_59 %>%
+  filter(deadline == 5) %>%
+  pull(item_id)
+
+items_10 <- deadlines_59 %>%
+  filter(deadline == 10) %>%
+  pull(item_id)
+
+items_15 <- deadlines_59 %>%
+  filter(deadline == 15) %>%
+  pull(item_id)
+
+items_20 <- deadlines_59 %>%
+  filter(deadline == 20) %>%
+  pull(item_id)
+
+# Categorical columns
+cats <- colnames(ed_logs[,c(8:11, 14:15)])
+
+# Adjustments to data
+ed_logs = ed_logs %>%
+  rename(response_in_seconds = response_in_milliseconds) %>%
+  mutate(deadline = case_when(
+    domain_id %in% c(1:4, 7, 10) ~ 20,
+    domain_id == 11 ~ 60,
+    domain_id == 9 ~ 30,
+    domain_id == 5 ~ 8,
+    domain_id == 59 & item_id %in% items_5 ~ 5,
+    domain_id == 59 & item_id %in% items_10 ~ 10,
+    domain_id == 59 & item_id %in% items_15 ~ 15,
+    domain_id == 59 & item_id %in% items_20 ~ 20),
+    response_in_seconds = response_in_seconds / 1000,
+    across(all_of(cats), as.factor)
+  ) 
+# Adding time_weeks column and organizing by user_id then date
+ed_logs <- ed_logs %>%
+  group_by(user_id) %>%
+  arrange(user_id, date) %>%
+  mutate(time_weeks = ceiling(as.numeric(
+    difftime(date, start_date, units = "weeks")
+  ))) %>%
+  mutate(time_weeks = ifelse(time_weeks < 1, 1, time_weeks)) %>%  # Ensure any negative or 0 values are set to 1
+  ungroup() 
+
+```
+
+
+Multilevel analysis next: analyzing growth slopes in the first 2 months of 2024 (Sep-Oct 25) to growth slopes after the change (Oct 25 - Dec)
 
 ```{r}
 ### Checking amount of items played in the two periods, per domain ###
@@ -210,8 +260,8 @@ t_test_data <- period_logs[period_logs$period == "Oct-Dec",] %>%
 
 # group 0 = used extended deadline, responded incorrect
 # group 1 = used extended deadline, responded correct
-group_0 <- experiment$q_score_diff[experiment$late_response == 1 & experiment$correct_answered == 0]
-group_1 <- experiment$q_score_diff[experiment$late_response == 1 & experiment$correct_answered == 1]
+group_0 <- t_test_data$q_score_diff[t_test_data$late_response == 1 & t_test_data$correct_answered == 0]
+group_1 <- t_test_data$q_score_diff[t_test_data$late_response == 1 & t_test_data$correct_answered == 1]
 
 # T-test: do players lose the same amount of q_score if they answered correctly VS incorrectly in the extended deadline?
 t_test_result <- t.test(group_0, group_1)
@@ -380,7 +430,7 @@ anova(intervention_5, intervention_final)
 # Results from intervention_5 are interesting:
 # usage of the extended deadline appears to negatively affect q_score
 # however, users who use it rarely seem to benefit most from it, showing higher q_scores
-# whereas those who use it more often show lower q_scores
+# while those who use it often still have better q_scores than those who never used it
 
 # This could simply result from the fact that players who need and use the extended deadline
 # are more likely to have less ability than those who do not
@@ -447,7 +497,7 @@ prediction_raw <- prediction_raw %>%
 ```{r}
 ### Plotting slopes for different periods (across domains, grades, difficulties) ###
 
-## SMOOTH PLOT ##
+## SMOOTH (LINEAR) PLOT ##
 # Aggregate over all other unnecessary variables (for this plot)
 prediction_summary_smooth <- prediction_smooth %>%
   group_by(session, period) %>%
@@ -455,12 +505,12 @@ prediction_summary_smooth <- prediction_smooth %>%
 prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
                                            levels = c("Sep-Oct", "Oct-Dec"))
 
-### SMOOTH - Difference in Ability Growth Between the 2 Periods ###
+### LINEAR - Difference in Ability Growth Between the 2 Periods ###
 ggplot(prediction_summary_smooth, aes(x = session, y = mean_predicted_q_score, color = period)) +
   geom_line(aes(group = period), size = 1.2) +
   theme_minimal() +
   labs(
-    title = "Smooth Model Predictions",
+    title = "Linear Model Predictions",
     x = "Session",
     y = "Predicted Q-Score",
     color = "Period"
@@ -479,7 +529,7 @@ ggplot(prediction_summary_raw, aes(x = session, y = mean_predicted_q_score, colo
   geom_line(aes(group = period), size = 1.2) +
   theme_minimal() +
   labs(
-    title = "Raw Predictions",
+    title = "Raw Model Predictions",
     x = "Session",
     y = "Predicted Q-Score",
     color = "Period"
@@ -513,7 +563,7 @@ ggplot(prediction_summary_obs, aes(x = session, y = mean_observed_q_score, color
 ### Plots of growth for different domains ###
 domains <- c(1, 2, 3, 4, 5, 7, 9, 10, 11, 59)
 
-## SMOOTH PLOT ##
+## LINEAR PLOT ##
 # Aggregate over all other unnecessary variables
 prediction_summary_smooth <- prediction_smooth %>%
   group_by(period, domain_id, session) %>%
@@ -521,14 +571,14 @@ prediction_summary_smooth <- prediction_smooth %>%
 prediction_summary_smooth$period <- factor(prediction_summary_smooth$period,
                                            levels = c("Sep-Oct", "Oct-Dec"))
 
-### SMOOTH - Difference in Ability Growth Between the 2 Periods, for all Domains ###
+### LINEAR - Difference in Ability Growth Between the 2 Periods, for all Domains ###
 for (i in domains){
   p <- ggplot(prediction_summary_smooth[prediction_summary_smooth$domain_id == i,],
               aes(x = session, y = mean_predicted_q_score, color = period)) +
     geom_line(aes(group = period), size = 1.2) +  # Fit line for each period
     theme_minimal() +
     labs(
-      title = paste("Smooth Predicted Session and Q-Score by Period, Domain", i),
+      title = paste("Linear Predicted Session and Q-Score by Period, Domain", i),
       x = "Session",
       y = "Predicted Q-Score",
       color = "Period"
@@ -589,7 +639,7 @@ for (i in domains){
 ### Difference in Ability Growth Between the 2 Periods, for all Grades ###
 grades <- c(3, 4, 5, 6, 7, 8)
 
-## SMOOTH PLOT ##
+## LINEAR PLOT ##
 # Aggregate over all other unnecessary variables
 prediction_summary_smooth <- prediction_smooth %>%
   group_by(period, grade, session) %>%
@@ -603,7 +653,7 @@ for (i in grades){
     geom_line(aes(group = period), size = 1.2) +
     theme_minimal() +
     labs(
-      title = paste("Smooth Predicted Session and Q-Score by Period, Grade", i),
+      title = paste("Linear Predicted Session and Q-Score by Period, Grade", i),
       x = "Session",
       y = "Predicted Q-Score",
       color = "Period"
