@@ -1,15 +1,16 @@
 ---
-title: "Untitled"
-author: "Ender Alexandru, Laura Fetz, Jessee Moomey"
-date: "`r Sys.Date()`"
+title: "Whole Code"
+author: "Jessee Moomey, Laura Fetz, Ender Alexandru"
+date: "2025-02-06"
 output: html_document
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This code, separated into the groupings: descriptive (and engagement), ability, and motivation, and all the plots, as separate branches can be also found at https://github.com/JSMoom/lucky-13/branches.
+This code separated into the groupings: descriptive (and engagement), ability, and motivation, and all the plots as separate file can be also found at https://github.com/JSMoom/lucky-13/branches.
 
 ```{r}
 # Loading packages
@@ -27,6 +28,9 @@ library(lubridate)
 library(DBI)
 library(ggalluvial)
 library(survival)
+library(oefenwebHelpers)
+# Linter
+lint_this() # nolint
 # Establishing connection with oefenweb
 con <- oefenwebDatabase::connect()
 ```
@@ -1016,7 +1020,7 @@ data$date <- as.POSIXct(data$date)
 
 # Add `hour` column to the data
 data <- data %>%
-  mutate(hour = hour(date))  # Extract hour from the date column
+  mutate(hour = hour(date)) # Extract hour from the date column
 
 # Filter data for "After" the new UI and exclude rows where no_answer = 1 and late_response = 1
 filtered_data <- data %>%
@@ -1026,8 +1030,8 @@ filtered_data <- data %>%
 late_response_by_hour <- filtered_data %>%
   group_by(hour) %>%
   summarize(
-    total_responses   = n(),
-    late_responses    = sum(late_response),
+    total_responses = n(),
+    late_responses = sum(late_response),
     late_response_rate = round(mean(late_response) * 100, 2),
     .groups = "drop"
   )
@@ -1036,8 +1040,8 @@ late_response_by_hour <- filtered_data %>%
 late_response_by_weekday <- filtered_data %>%
   group_by(weekday = wday(date, label = TRUE, abbr = FALSE)) %>%
   summarize(
-    total_responses   = n(),
-    late_responses    = sum(late_response),
+    total_responses = n(),
+    late_responses = sum(late_response),
     late_response_rate = round(mean(late_response) * 100, 2),
     .groups = "drop"
   )
@@ -1194,7 +1198,10 @@ result_no_answer <- data_domain_59 %>%
   )
 
 # Plot the result using ggplot
-no_answer_plot <- ggplot(result_no_answer, aes(x = as.factor(deadline), y = percentage_no_answer, fill = as.factor(new_UI))) +
+no_answer_plot <- ggplot(result_no_answer, aes(
+  x = as.factor(deadline), y = percentage_no_answer,
+  fill = as.factor(new_UI)
+)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = c("#00BFC4", "#fe6c66")) + # Custom colors for new_UI 0 and 1
   labs(
@@ -1218,7 +1225,10 @@ correct_answered <- data_domain_59 %>%
   )
 
 # Plot the result using ggplot
-correct_plot <- ggplot(correct_answered, aes(x = as.factor(deadline), y = percentage_correct, fill = as.factor(new_UI))) +
+correct_plot <- ggplot(correct_answered, aes(
+  x = as.factor(deadline), y = percentage_correct,
+  fill = as.factor(new_UI)
+)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = c("#00BFC4", "#fe6c66")) + # Custom colors for new_UI 0 and 1
   labs(
@@ -1247,7 +1257,10 @@ result_items_played <- data %>%
 result_items_played$domain_name <- domain_names[as.character(result_items_played$domain_id)]
 
 # Plot the result using ggplot
-items_played_plot <- ggplot(result_items_played, aes(x = domain_name, y = total_items_played, fill = as.factor(new_UI))) +
+items_played_plot <- ggplot(result_items_played, aes(
+  x = domain_name, y = total_items_played,
+  fill = as.factor(new_UI)
+)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = c("#00BFC4", "#F8766D")) + # Custom colors for new_UI 0 and 1
   labs(
@@ -1421,7 +1434,8 @@ q_score_sd <- attr(scale(multilevel_data_unique$q_score), "scaled:scale")
 ```
 
 ```{r}
-### T-test to check whether q_score penalty is the same, given that an answer was correct VS incorrect in the extended deadline ###
+### T-test to check whether q_score penalty is the same, given that an answer was correct VS
+### incorrect in the extended deadline ###
 t_test_data <- period_logs[period_logs$period == "Oct-Dec", ] %>%
   group_by(user_id, domain_id) %>%
   mutate(q_score_diff = new_user_domain_q_score - lag(new_user_domain_q_score)) %>%
@@ -1446,20 +1460,20 @@ print(t_test_result)
 fixed_slopes <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     (1 | user_id),
-  REML = F, data = multilevel_data_unique
+  REML = FALSE, data = multilevel_data_unique
 )
 
 random_slopes <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique
+  REML = FALSE, data = multilevel_data_unique
 )
 
 domain <- lmer(
   q_score_scaled ~ 1 + session_scaled +
     domain_id +
     (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique
+  REML = FALSE, data = multilevel_data_unique
 )
 
 grade <- lmer(
@@ -1467,7 +1481,7 @@ grade <- lmer(
     domain_id +
     grade +
     (1 + session_scaled | user_id),
-  REML = F, data = multilevel_data_unique
+  REML = FALSE, data = multilevel_data_unique
 )
 # does not converge with session:grade
 
@@ -1650,8 +1664,13 @@ prediction_smooth <- expand.grid(
 
 # Set all obs in Sep-Oct to have extended_deadline_group set to "Never"
 prediction_smooth <- prediction_smooth %>%
-  mutate(extended_deadline_group = ifelse(period == "Sep-Oct", "Never", as.character(extended_deadline_group)))
-prediction_smooth$extended_deadline_group <- factor(prediction_smooth$extended_deadline_group, levels = levels(multilevel_data_unique$extended_deadline_group))
+  mutate(extended_deadline_group = ifelse(period == "Sep-Oct",
+    "Never",
+    as.character(extended_deadline_group)
+  ))
+prediction_smooth$extended_deadline_group <- factor(prediction_smooth$extended_deadline_group,
+  levels = levels(multilevel_data_unique$extended_deadline_group)
+)
 
 # Add predictions to the grid
 prediction_smooth$predicted_q_score_scaled <- predict(intervention_final,
@@ -1931,7 +1950,10 @@ prediction_summary_raw <- prediction_raw %>%
   group_by(extended_deadline_group) %>%
   summarize(mean_observed_q_score = mean(q_score), .groups = "drop")
 
-ggplot(prediction_summary_raw, aes(x = extended_deadline_group, y = mean_observed_q_score, color = extended_deadline_group)) +
+ggplot(prediction_summary_raw, aes(
+  x = extended_deadline_group, y = mean_observed_q_score,
+  color = extended_deadline_group
+)) +
   geom_point(size = 3, position = position_dodge(width = 0.5)) + # Mean points
   labs(
     title = "Mean Q-Score by Extended Deadline Usage (Oct-Dec)",
@@ -2032,13 +2054,19 @@ sankey_tibble <- sankey_data %>%
 
 # Make the plot
 sankey_tibble %>%
-  ggplot(aes(x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  ggplot(aes(
+    x = interval, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins,
+    label = mode_show_coins
+  )) +
   theme_minimal() +
   # scale_fill_manual(values = color_scheme2) +
   geom_flow(color = "darkgray") +
   geom_stratum() +
   theme(legend.position = "top") +
-  labs(x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals", legend = "Mode show_coins")
+  labs(
+    x = "2-Week Intervals", y = "Users", title = "Mode show_coins across 2-Week Intervals",
+    legend = "Mode show_coins"
+  )
 ```
 
 Zooming into this year and changing to weekly.
@@ -2066,12 +2094,18 @@ sankey_tibble <- sankey_data %>%
 
 # Make the plot
 coins_sankey <- sankey_tibble %>%
-  ggplot(aes(x = start_date, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins, label = mode_show_coins)) +
+  ggplot(aes(
+    x = start_date, stratum = mode_show_coins, alluvium = user_id, fill = mode_show_coins,
+    label = mode_show_coins
+  )) +
   theme_minimal() +
   geom_flow(color = "darkgray") +
   geom_stratum() +
   custom_theme +
-  labs(x = "Interval Start Date", y = "Users", title = "Coin Showing Choice Mode Change in 2-week Intervals", fill = "Mode show_coins")
+  labs(
+    x = "Interval Start Date", y = "Users",
+    title = "Coin Showing Choice Mode Change in 2-week Intervals", fill = "Mode show_coins"
+  )
 
 coins_sankey
 ggsave("Jan Group/Plots/Show_coins_Sankey.jpeg")
@@ -2081,7 +2115,8 @@ ggsave("Jan Group/Plots/Show_coins_Sankey.jpeg")
 Between section 30 and 31 is when the change is made. Which happens to also be paired by a major exodus of students from not showing to then showing, meaning that at least to some extent communication of the feature has occurred outside of personal experience.
 
 ```{r}
-# Looking deeper. Investigating if students who've never shown coins between sep 1st 2024 and oct 25th 2024 are part of that exodus
+# Looking deeper. Investigating if students who've never shown coins between sep 1st 2024 and oct 25th 2024
+# are part of that exodus
 stuff <- ed_logs %>%
   select(user_id, show_coins, time_weeks, date) %>%
   filter(
@@ -2144,7 +2179,10 @@ coins_plot <- show_count %>%
     labels = c("Not Showing", "Showing"),
     name = "Coins"
   ) +
-  labs(title = "User Coin Showing Behavior", subtitle = "Ordered by Proportion of Coins Showing & Total Played", x = "Users", y = "Count") +
+  labs(
+    title = "User Coin Showing Behavior", subtitle = "Ordered by Proportion of Coins Showing & Total Played",
+    x = "Users", y = "Count"
+  ) +
   custom_theme +
   theme(axis.text.x = element_blank())
 
@@ -2159,7 +2197,10 @@ calc <- show_count %>%
     prop = sum(count[show_coins == 1]) / total
   ) %>%
   ungroup()
-paste0("Of users who switched from never showing to showing ", round(sum(calc$prop >= .5) / nrow(calc) * 100, 2), "% of them stuck with showing coins most of the time.")
+paste0(
+  "Of users who switched from never showing to showing ", round(sum(calc$prop >= .5) / nrow(calc) * 100, 2),
+  "% of them stuck with showing coins most of the time."
+)
 ```
 
 We see that the majority of those who switched coins on, most of the time kept coins on which is a substantial change from their previous behavior.
@@ -2203,12 +2244,18 @@ color_scheme2 <- c(
 # Change in difficulty selection plot
 # Make the sankey plot
 dif_sankey <- sankey_tibble %>%
-  ggplot(aes(x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill = Mode_difficulty, label = Mode_difficulty)) +
+  ggplot(aes(
+    x = start_date, stratum = Mode_difficulty, alluvium = user_id, fill = Mode_difficulty,
+    label = Mode_difficulty
+  )) +
   scale_fill_manual(values = color_scheme2) +
   geom_flow(color = "darkgray") +
   geom_stratum() +
   custom_theme +
-  labs(x = "Interval Start Date", y = "Users", title = "Difficulty Chosen Most Often across 2-Week Intervals", legend = "Mode Difficulty")
+  labs(
+    x = "Interval Start Date", y = "Users", title = "Difficulty Chosen Most Often across 2-Week Intervals",
+    legend = "Mode Difficulty"
+  )
 
 dif_sankey
 ggsave("Jan Group/Plots/Mode Difficulty Sankey.jpeg")
@@ -2283,13 +2330,19 @@ stayers_all <- switch_tracking_all %>%
   summarise(
     stayed_switched = case_when(
       # Never switched: all intervals are NA or the same as the first non-NA value
-      all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Easy" ~ "Never Switched - Easy",
-      all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Medium" ~ "Never Switched - Medium",
-      all(na.omit(switched) == first(na.omit(switched))) & first(first_cat) == "Hard" ~ "Never Switched - Hard",
+      all(na.omit(switched) == first(na.omit(switched))) &
+        first(first_cat) == "Easy" ~ "Never Switched - Easy",
+      all(na.omit(switched) == first(na.omit(switched))) &
+        first(first_cat) == "Medium" ~ "Never Switched - Medium",
+      all(na.omit(switched) == first(na.omit(switched))) &
+        first(first_cat) == "Hard" ~ "Never Switched - Hard",
       # Did Not Stay Switched: First and last are the same but switched at some point
-      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Easy" ~ "Didn't Stay Switched - Easy",
-      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Medium" ~ "Didn't Stay Switched - Medium",
-      first(na.omit(switched)) == last(na.omit(switched)) & first(first_cat) == "Hard" ~ "Didn't Stay Switched - Hard",
+      first(na.omit(switched)) == last(na.omit(switched)) &
+        first(first_cat) == "Easy" ~ "Didn't Stay Switched - Easy",
+      first(na.omit(switched)) == last(na.omit(switched)) &
+        first(first_cat) == "Medium" ~ "Didn't Stay Switched - Medium",
+      first(na.omit(switched)) == last(na.omit(switched)) &
+        first(first_cat) == "Hard" ~ "Didn't Stay Switched - Hard",
       # Stayed Switched: First and last are different
       first(first_cat) == "Easy" ~ "Stayed Switched - Easy",
       first(first_cat) == "Medium" ~ "Stayed Switched - Medium",
@@ -2354,7 +2407,11 @@ collapsed_long <- collapsed_fgb %>%
   ) %>%
   mutate(
     stayed_switched = factor(stayed_switched,
-      levels = c("Didn't Stay Switched - Easy", "Didn't Stay Switched - Medium", "Didn't Stay Switched - Hard", "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard", "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard")
+      levels = c(
+        "Didn't Stay Switched - Easy", "Didn't Stay Switched - Medium", "Didn't Stay Switched - Hard",
+        "Stayed Switched - Easy", "Stayed Switched - Medium", "Stayed Switched - Hard",
+        "Never Switched - Easy", "Never Switched - Medium", "Never Switched - Hard"
+      )
     ),
     response_type = factor(response_type,
       levels = c("no_answer_before", "no_answer_after", "extended_deadline"),
@@ -2427,7 +2484,10 @@ how many rage quits after non-answer before vs how many rq after late response a
 # Of note, domain 5 is the only to not have 10/session but 15
 # Data for motivation analysis: soft-quit, hard-quit, sessions per instance
 motivation_data <- ed_logs %>%
-  select(user_id, answer, date, new_user_domain_session_count, correct_answered, grade, domain_id, deadline, late_response, session, response_in_seconds) %>%
+  select(
+    user_id, answer, date, new_user_domain_session_count, correct_answered, grade, domain_id, deadline,
+    late_response, session, response_in_seconds
+  ) %>%
   rename(session_number = new_user_domain_session_count) %>%
   # Getting users who have before and after data and just this school year
   mutate(change = if_else(date < change_date, "Before", "After")) %>%
@@ -2603,7 +2663,8 @@ Cox Proportional Hazards Model to check if extended_deadline use has an increase
 
 ```{r}
 # Function to plot the different survival curves
-surv_plotter <- function(surv_fit_grouped, groups = c("No Extension Used", "Extension Used"), title_specification, xlimit) {
+surv_plotter <- function(surv_fit_grouped, groups = c("No Extension Used", "Extension Used"),
+                         title_specification, xlimit) {
   # Color Pallet
   custom_color <- c("#f8766d", "#00bfc4")
 
@@ -2697,7 +2758,10 @@ cox_model_soft <- coxph(Surv(duration, soft_quit) ~ extended_deadline_used, data
 cox_fit_soft <- survfit(cox_model_soft, newdata = data.frame(extended_deadline_used = c(0, 1)))
 
 # Plot it
-se_plot <- surv_plotter(cox_fit_soft, title_specification = ("Extended Duration and Mid-Session Quitting"), xlimit = 5000)
+se_plot <- surv_plotter(cox_fit_soft,
+  title_specification = ("Extended Duration and Mid-Session Quitting"),
+  xlimit = 5000
+)
 
 se_plot
 ggsave("Jan Group/Plots/Soft Quitting Cox-Curve: Extended Duration.jpeg")
@@ -2716,7 +2780,9 @@ cox_model_soft_after <- coxph(Surv(duration, soft_quit) ~ extended_deadline_used
 cox_fit_soft_after <- survfit(cox_model_soft_after, newdata = data.frame(extended_deadline_used = c(0, 1)))
 
 # Plot it
-se_after_plot <- surv_plotter(cox_fit_soft_after, title_specification = ("Extended Duration and Mid-Session Quitting: After"), xlimit = 5000)
+se_after_plot <- surv_plotter(cox_fit_soft_after,
+  title_specification = ("Extended Duration and Mid-Session Quitting: After"), xlimit = 5000
+)
 
 se_after_plot
 ggsave("Jan Group/Plots/Soft Quitting Cox-Curve: Extended Duration only After.jpeg")
@@ -2733,7 +2799,10 @@ cox_model_hard <- coxph(Surv(duration, hard_quit) ~ extended_deadline_used, data
 cox_fit_hard <- survfit(cox_model_hard, newdata = data.frame(extended_deadline_used = c(0, 1)))
 
 # Plot it
-he_plot <- surv_plotter(cox_fit_hard, title_specification = ("Extended Duration and Application Quitting"), xlimit = 5000)
+he_plot <- surv_plotter(cox_fit_hard,
+  title_specification = ("Extended Duration and Application Quitting"),
+  xlimit = 5000
+)
 
 he_plot
 ggsave("Jan Group/Plots/Hard Quitting Cox-Curve: Extended Duration.jpeg")
@@ -2750,7 +2819,9 @@ cox_model_hard_after <- coxph(Surv(duration, hard_quit) ~ extended_deadline_used
 cox_fit_hard_after <- survfit(cox_model_hard_after, newdata = data.frame(extended_deadline_used = c(0, 1)))
 
 # Plot it
-he_after_plot <- surv_plotter(cox_fit_hard_after, title_specification = ("Extended Duration and Application Quitting: After"), xlimit = 5000)
+he_after_plot <- surv_plotter(cox_fit_hard_after,
+  title_specification = ("Extended Duration and Application Quitting: After"), xlimit = 5000
+)
 
 he_after_plot
 ggsave("Jan Group/Plots/Hard Quitting Cox-Curve: Extended Duration only After.jpeg")
@@ -2789,7 +2860,10 @@ cox_model_hard_complete <- coxph(Surv(duration, hard_quit) ~ extended_deadline_u
 cox_fit_hard_complete <- survfit(cox_model_hard_complete, newdata = data.frame(extended_deadline_used = c(0, 1)))
 
 # Plot it
-surv_plotter(cox_fit_hard_complete, groups = c("no extended", "extended"), title_specification = ("Extended Duration and Application Quitting: At Least 1"), xlimit = 5000)
+surv_plotter(cox_fit_hard_complete,
+  groups = c("no extended", "extended"),
+  title_specification = ("Extended Duration and Application Quitting: At Least 1"), xlimit = 5000
+)
 ```
 
 Also doesn't seem to change the curve very much, only increasing the survival chance very slightly.
