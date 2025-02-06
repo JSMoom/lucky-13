@@ -30,7 +30,7 @@ library(ggalluvial)
 library(survival)
 library(oefenwebHelpers)
 # Linter
-lint_this() # nolint
+# lint_this() # nolint
 # Establishing connection with oefenweb
 con <- oefenwebDatabase::connect()
 ```
