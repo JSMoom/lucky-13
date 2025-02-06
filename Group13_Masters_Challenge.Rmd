@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This code separated into the groupings: descriptive (and engagement), ability, and motivation, and all the plots as separate file can be also found at https://github.com/JSMoom/lucky-13/branches.
+This code, separated into the groupings: descriptive (and engagement), ability, and motivation, and all the plots, as separate branches can be also found at https://github.com/JSMoom/lucky-13/branches.
 
 ```{r}
 # Loading packages
