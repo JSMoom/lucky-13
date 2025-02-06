@@ -32,7 +32,7 @@ library(survival)
 con <- oefenwebDatabase::connect()
 ```
 
-### Data Processing
+### DATA PROCESSING
 
 ```{r}
 # Create necessary objects
@@ -217,7 +217,9 @@ custom_theme <- theme_minimal() +
 custom_colors <- c("Before" = "#00BFC4", "After" = "#F8766D") # Adjust colors as needed
 ```
 
-No Answer
+### NO ANSWER
+
+In this section we look at the percentage of no answers before and after the implementation of the extended deadline.
 
 
 ```{r}
@@ -291,7 +293,9 @@ no_answer_by_learning_goal <- data %>%
 # Combine all plots into a 2x2 grid
 grid.arrange(no_answer_by_domain, no_answer_by_grade, no_answer_by_difficulty, no_answer_by_learning_goal, ncol = 2)
 ```
-Statistical tests
+### TESTING SIGNIFICANCE
+
+Here we perform t-test to see if the observed patterns are significant.
 
 ```{r}
 # Get mean, sd, and n of before and after
@@ -355,8 +359,9 @@ results_by_difficulty
 results_by_learning_goal
 ```
 
-Help
+### HELP
 
+In this section we look at how often students use the help function before and after the change. The plots show percentage compared to total answers.
 
 ```{r}
 # Plot percentage of no help by domain
@@ -430,8 +435,9 @@ help_learning_goal <- data %>%
 grid.arrange(help_domain, help_grade, help_difficulty, help_domain, ncol = 2)
 ```
 
-Statistical analysis
+### TESTING SIGNIFICANCE
 
+Again we perform t-tests to see whether the observed patterns are significant.
 
 ```{r}
 # Summarize the data: Calculate the mean and standard deviation of "help" usage before and after the new UI
@@ -490,9 +496,9 @@ results_by_difficulty
 results_by_learning_goal
 ```
 
-Percentage correct without
+### CORRECT ANSWERS
 
-
+Here we look at the percentage of correct answers before and after the change.
 ```{r}
 # Compute percentage of correct answers by domain
 correct_answers_domain <- data %>%
@@ -588,9 +594,9 @@ correct_learning_goals <- ggplot(correct_answers_learning,
 grid.arrange(correct_domain, correct_grade, correct_difficulty, correct_learning_goals, ncol = 2)
 ```
 
-Testing significance 
+### TESTING SIGNIFICANCE
 
-
+We perform t-tests to see if the patterns are significant. 
 ```{r}
 # Convert `correct_answered` to numeric
 data$correct_answered <- as.numeric(as.character(data$correct_answered))
@@ -644,9 +650,10 @@ print(results_by_grade)
 print(results_by_difficulty)
 print(results_by_learning_goal)
 ```
-basic overview :
 
+### TOTAL ITEMS PLAYED
 
+We compute the total number of items played before and after and perform a t-test to see if the differences are significant.
 ```{r}
 # Total items answered
 items_answered <- data %>%
@@ -662,6 +669,9 @@ print(t_test_items)
 
 ```
 
+### AVERAGE RESPONSE TIME
+
+We check if the average response time has changed significantly.
 ```{r}
 # Average response time and significance test
 response_time <- data %>%
@@ -678,6 +688,9 @@ t_test_response_time <- t.test(response_in_seconds ~ new_UI, data = data)
 print(t_test_response_time)
 ```
 
+### AVERAGE DAILY USERS
+
+We see if there is a difference in how many daily users are using the platform.
 ```{r}
 # Average daily unique users and significance test
 daily_unique_users <- data %>%
@@ -699,6 +712,9 @@ t_test_daily_users <- t.test(
 print(t_test_daily_users)
 ```
 
+### AVERAGE DAILY SESSIONS
+
+We see if there is a difference in the average daily sessions before and after the change.
 ```{r}
 # Average daily sessions per user and significance test
 daily_sessions_per_user <- data %>%
@@ -732,6 +748,9 @@ print(t_test_sessions_per_user)
 
 ```
 
+### COMBINING RESULTS
+
+We combine the results from above.
 ```{r}
 # Combine results
 descriptives <- items_answered %>%
@@ -743,8 +762,9 @@ descriptives <- items_answered %>%
 print(descriptives)
 
 ```
-Temporal pattern
+### TEMPORAL PATTERNS
 
+Here we look at patterns in the data based on time. For instance we look at the rate of extended deadline use per daily hour, week since implementation and day of the week. A late response, as we call it here, means that the user provided a answer (meaning it was not no answer) within the extended deadline. 
 ```{r}
 # Ensure `date` is in POSIXct format
 data$date <- as.POSIXct(data$date)
@@ -828,8 +848,9 @@ plot_week <- ggplot(late_response_by_week, aes(x = week_since_ui, y = late_respo
 # Arrange the three plots into a single row grid
 grid.arrange(plot_hour, plot_weekday, plot_week, ncol = 3)
 ```
-Statistical Analysis
+### TESTING SIGNIFICANCE
 
+Again we test whether these patterns are significant this time using ANOVA. We also perform post-hoc tests.
 ```{r}
 # ANOVA for Late Response Rate by Hour
 anova_hour <- aov(late_response ~ as.factor(hour), data = filtered_data)
@@ -888,7 +909,9 @@ responses_by_weekday <- filtered_data %>%
   )
 ```
 
-Domain 59
+### DOMAIN 59
+
+As domain 59 was of special interest we create the inital plots again this time for the different deadlines within the domain 59.
 
 ```{r}
 # Filter data for domain = 59
@@ -964,7 +987,9 @@ no_answer_plot
 late
 correct_plot
 ```
+### ITEMS PLAYED
 
+Here we plot the total number of items played across domains before and after the change. 
 ```{r}
 # Calculate the total number of unique items (item_id) played before and after the new UI (1 vs 0) per domain
 result_items_played <- data %>%
@@ -994,7 +1019,9 @@ print(items_played_plot)
 ```
 
 
+### PERCENTAGE OF LATE RESPONSES PAST EXTENDED DEADLINE
 
+Here we compute the percentage of late responses that went past the extended deadline
 ```{r}
 # Percent of late responses that went past extended
 sum(ed_logs_after$answer == "…") / sum(ed_logs_after$late_response == 1) * 100
